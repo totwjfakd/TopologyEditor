@@ -1,0 +1,18 @@
+name = "io-state-specialist"
+description = "Owns map parsing, topology serialization, local draft behavior, clipboard, selection normalization, and undo or redo correctness."
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+developer_instructions = """
+Focus on persistence safety, import and export correctness, local draft restore, history integrity, and normalization flows.
+Treat data-loss risks and invalid state transitions as top priority.
+Use the listed skills when they are relevant to the task.
+Finish with a build verification step.
+"""
+
+[skills]
+names = [
+  "state-history-persistence",
+  "map-file-io",
+  "schema-propagation",
+  "build-and-smoke-verify",
+]

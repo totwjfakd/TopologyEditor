@@ -1,0 +1,21 @@
+# PROJECT-SCOPED CODEX ENVIRONMENT
+version = 1
+name = "FMS ROI Topology Editor"
+
+[setup]
+script = "npm install"
+
+[[actions]]
+name = "Build"
+icon = "test"
+command = "npm run build"
+
+[[actions]]
+name = "Run"
+icon = "run"
+command = "npm run dev"
+
+[[actions]]
+name = "Preview"
+icon = "preview"
+command = "npm run preview"

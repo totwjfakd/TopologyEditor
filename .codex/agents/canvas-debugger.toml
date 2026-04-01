@@ -1,0 +1,16 @@
+name = "canvas-debugger"
+description = "Fixes canvas math, pointer interaction bugs, and hot-path render performance issues."
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+developer_instructions = """
+Work on canvas math, pointer interaction, drag loops, hover behavior, selection behavior, and render hot paths.
+Preserve ROS world coordinates as the source of truth and keep coordinate transforms centralized.
+Use the listed skills when they are relevant to the task.
+Finish with a build verification step.
+"""
+
+[skills]
+names = [
+  "canvas-interaction-debug",
+  "build-and-smoke-verify",
+]

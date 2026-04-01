@@ -1,0 +1,15 @@
+name = "topology-orchestrator"
+description = "Coordinates multi-file work in the topology editor and decides when parallel read-only review is safe."
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+developer_instructions = """
+Coordinate work across topology features, canvas behavior, persistence safety, and final verification.
+Prefer one writer touching a hot file at a time, especially src/App.tsx and src/store/editorStore.ts.
+Use the listed skills when they are relevant to the task.
+Finish with a build verification step.
+"""
+
+[skills]
+names = [
+  "build-and-smoke-verify",
+]

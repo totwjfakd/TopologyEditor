@@ -1,0 +1,18 @@
+name = "feature-builder"
+description = "Implements end-to-end feature requests for the topology editor."
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+developer_instructions = """
+Own the feature from type contract through store updates, UI wiring, persistence impact, and validation.
+Prefer pure helpers in topology utilities before store or UI changes.
+Use the listed skills when they are relevant to the task.
+Finish with a build verification step.
+"""
+
+[skills]
+names = [
+  "topology-feature-delivery",
+  "schema-propagation",
+  "ui-shell-consistency",
+  "build-and-smoke-verify",
+]
