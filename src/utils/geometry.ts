@@ -95,7 +95,7 @@ export function fitViewToBounds(
   viewportWidth: number,
   viewportHeight: number,
   padding = 48,
-): ViewState {
+): Pick<ViewState, "zoom" | "panX" | "panY"> {
   const width = Math.max(bounds.maxX - bounds.minX, 1);
   const height = Math.max(bounds.maxY - bounds.minY, 1);
   const zoom = Math.max(

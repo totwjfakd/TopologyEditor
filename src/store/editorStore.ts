@@ -19,6 +19,7 @@ import {
   pasteClipboard,
   recalculateEdgeDistances,
 } from "../utils/topology";
+import { DEFAULT_VIEW_STATE } from "../utils/viewState";
 
 interface EditorState {
   document: TopologyDocument;
@@ -33,7 +34,7 @@ interface EditorState {
   setNodeType: (nodeType: NodeType) => void;
   setEdgeMode: (edgeMode: boolean) => void;
   toggleEdgeMode: () => void;
-  setView: (view: ViewState) => void;
+  patchView: (view: Partial<ViewState>) => void;
   setMouseWorld: (point: Point) => void;
   setSelection: (selection: SelectionState) => void;
   clearSelection: () => void;
@@ -71,12 +72,6 @@ interface EditorState {
   selectAll: () => void;
 }
 
-const defaultView: ViewState = {
-  zoom: 24,
-  panX: 480,
-  panY: 360,
-};
-
 const emptySelection: SelectionState = {
   nodeIds: [],
   edgeIds: [],
@@ -100,7 +95,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selection: emptySelection,
   nodeType: "destination",
   edgeMode: false,
-  view: defaultView,
+  view: DEFAULT_VIEW_STATE,
   mouseWorld: { x: 0, y: 0 },
   clipboard: null,
   historyPast: [],
@@ -108,9 +103,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setNodeType: (nodeType) => set({ nodeType, edgeMode: false }),
   setEdgeMode: (edgeMode) => set({ edgeMode }),
   toggleEdgeMode: () => set((state) => ({ edgeMode: !state.edgeMode })),
-  setView: (view) => set({ view }),
+  patchView: (view) => set((state) => ({ view: { ...state.view, ...view } })),
   setMouseWorld: (mouseWorld) => set({ mouseWorld }),
-  setSelection: (selection) => set({ selection }),
+  setSelection: (selection) =>
+    set({
+      selection: normalizeSelection(selection, get().document),
+    }),
   clearSelection: () => set({ selection: emptySelection }),
   replaceDocument: (document, selection) =>
     set({

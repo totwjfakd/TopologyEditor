@@ -44,6 +44,8 @@ export interface ViewState {
   zoom: number;
   panX: number;
   panY: number;
+  showNodeLabels: boolean;
+  showEdgeLabels: boolean;
 }
 
 export interface SelectionState {
