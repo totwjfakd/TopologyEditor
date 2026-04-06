@@ -46,12 +46,15 @@ import { InspectorPanel } from "./components/InspectorPanel";
 import { StatusBar } from "./components/StatusBar";
 import { ContextMenuView } from "./components/ContextMenuView";
 import { NodeEditorDialog } from "./components/NodeEditorDialog";
+import { SimulatorScreen } from "./components/SimulatorScreen";
 import { TopologyCanvas } from "./components/TopologyCanvas";
 
 type Message = {
   type: "error" | "info";
   text: string;
 };
+
+type ScreenMode = "editor" | "simulator";
 
 function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -78,6 +81,9 @@ function App() {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
   const [draftOffer, setDraftOffer] = useState<LocalDraft | null>(() => readLocalDraft());
+  const [screenMode, setScreenMode] = useState<ScreenMode>("editor");
+  const [simulatorShowNodeLabels, setSimulatorShowNodeLabels] = useState(true);
+  const [simulatorShowEdgeLabels, setSimulatorShowEdgeLabels] = useState(true);
 
   const editingNodeExists = useEditorStore((state) =>
     editingNodeId ? state.document.nodes.some((node) => node.id === editingNodeId) : false,
@@ -160,13 +166,17 @@ function App() {
       const text = await file.text();
       const parsed = JSON.parse(text);
       const nextDocument = sanitizeLoadedDocument(parsed);
+      const currentMapRaster = mapRasterRef.current;
+      const keepCurrentRaster = mapMatchesDocument(nextDocument, currentMapRaster);
       loadDocument(nextDocument);
-      setMapRaster(null);
+      setMapRaster(keepCurrentRaster ? currentMapRaster : null);
       setMessage({
         type: "info",
-        text: nextDocument.map.image
-          ? "토폴로지를 불러왔습니다. 배경 맵은 다시 업로드해 주세요."
-          : "토폴로지를 불러왔습니다.",
+        text: keepCurrentRaster
+          ? "토폴로지를 불러왔습니다. 기존 배경 맵을 유지합니다."
+          : nextDocument.map.image
+            ? "토폴로지를 불러왔습니다. 배경 맵은 다시 업로드해 주세요."
+            : "토폴로지를 불러왔습니다.",
       });
       requestAnimationFrame(() => fitScene());
     } catch (error) {
@@ -258,6 +268,20 @@ function App() {
     setMessage({ type: "info", text: "브라우저 임시 저장본을 삭제했습니다." });
   }
 
+  function handleOpenSimulator() {
+    const currentView = useEditorStore.getState().view;
+    setContextMenu(null);
+    setEditingNodeId(null);
+    setSpacePressed(false);
+    setSimulatorShowNodeLabels(currentView.showNodeLabels);
+    setSimulatorShowEdgeLabels(currentView.showEdgeLabels);
+    setScreenMode("simulator");
+  }
+
+  function handleReturnToEditor() {
+    setScreenMode("editor");
+  }
+
   useEffect(() => {
     if (!message) {
       return;
@@ -284,6 +308,10 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (screenMode === "simulator") {
+        return;
+      }
+
       if (event.key === " " && !isEditableTarget(event.target)) {
         setSpacePressed(true);
         event.preventDefault();
@@ -388,6 +416,7 @@ function App() {
     deleteSelection,
     pasteClipboardAt,
     redo,
+    screenMode,
     selectAll,
     setNodeType,
     toggleEdgeMode,
@@ -414,16 +443,28 @@ function App() {
 
       <AutoSaveBridge paused={Boolean(draftOffer)} />
 
-      <ToolbarContainer
-        onUploadMap={() => mapInputRef.current?.click()}
-        onLoadJson={() => jsonInputRef.current?.click()}
-        onSaveJson={handleJsonSave}
-        onUndo={undo}
-        onRedo={redo}
-        onSetNodeType={setNodeType}
-        onToggleEdgeMode={toggleEdgeMode}
-        onCommitResolution={handleResolutionCommit}
-      />
+      {screenMode === "editor" ? (
+        <ToolbarContainer
+          onUploadMap={() => mapInputRef.current?.click()}
+          onLoadJson={() => jsonInputRef.current?.click()}
+          onSaveJson={handleJsonSave}
+          onOpenSimulator={handleOpenSimulator}
+          onUndo={undo}
+          onRedo={redo}
+          onSetNodeType={setNodeType}
+          onToggleEdgeMode={toggleEdgeMode}
+          onCommitResolution={handleResolutionCommit}
+        />
+      ) : (
+        <SimulatorScreen
+          mapRaster={mapRaster}
+          showNodeLabels={simulatorShowNodeLabels}
+          showEdgeLabels={simulatorShowEdgeLabels}
+          onToggleNodeLabels={() => setSimulatorShowNodeLabels((current) => !current)}
+          onToggleEdgeLabels={() => setSimulatorShowEdgeLabels((current) => !current)}
+          onBackToEditor={handleReturnToEditor}
+        />
+      )}
 
       {draftOffer ? (
         <RecoveryBanner
@@ -433,28 +474,30 @@ function App() {
         />
       ) : null}
 
-      <div className="workspace">
-        <div className="workspace-main">
-          <TopologyCanvas
-            viewportRef={viewportRef}
+      {screenMode === "editor" ? (
+        <div className="workspace">
+          <div className="workspace-main">
+            <TopologyCanvas
+              viewportRef={viewportRef}
+              mapRaster={mapRaster}
+              spacePressed={spacePressed}
+              onOpenNodeEditor={setEditingNodeId}
+              onOpenContextMenu={setContextMenu}
+            />
+            <StatusBarContainer mapRaster={mapRaster} />
+          </div>
+          <InspectorContainer
             mapRaster={mapRaster}
-            spacePressed={spacePressed}
-            onOpenNodeEditor={setEditingNodeId}
-            onOpenContextMenu={setContextMenu}
+            onOpenNodeEditor={(nodeId) => setEditingNodeId(nodeId)}
+            onShowError={(text) => setMessage({ type: "error", text })}
+            onFitScene={fitScene}
           />
-          <StatusBarContainer mapRaster={mapRaster} />
         </div>
-        <InspectorContainer
-          mapRaster={mapRaster}
-          onOpenNodeEditor={(nodeId) => setEditingNodeId(nodeId)}
-          onShowError={(text) => setMessage({ type: "error", text })}
-          onFitScene={fitScene}
-        />
-      </div>
+      ) : null}
 
       {message ? <div className={`notice notice-${message.type}`}>{message.text}</div> : null}
 
-      {contextMenu ? (
+      {screenMode === "editor" && contextMenu ? (
         <ContextMenuContainer
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
@@ -472,11 +515,13 @@ function App() {
         />
       ) : null}
 
-      <NodeEditorDialogContainer
-        nodeId={editingNodeId}
-        onClose={() => setEditingNodeId(null)}
-        onSave={handleNodeDialogSave}
-      />
+      {screenMode === "editor" ? (
+        <NodeEditorDialogContainer
+          nodeId={editingNodeId}
+          onClose={() => setEditingNodeId(null)}
+          onSave={handleNodeDialogSave}
+        />
+      ) : null}
     </div>
   );
 }
@@ -522,6 +567,7 @@ function ToolbarContainer(
     | "nodeCount"
     | "edgeCount"
     | "mapLabel"
+    | "canOpenSimulator"
     | "onToggleNodeLabels"
     | "onToggleEdgeLabels"
   >,
@@ -535,6 +581,11 @@ function ToolbarContainer(
   const canUndo = useEditorStore((state) => state.historyPast.length > 0);
   const canRedo = useEditorStore((state) => state.historyFuture.length > 0);
   const patchView = useEditorStore((state) => state.patchView);
+  const canOpenSimulator = Boolean(
+    document.map.image ||
+      document.nodes.length > 0 ||
+      document.edges.length > 0,
+  );
 
   return (
     <Toolbar
@@ -544,6 +595,7 @@ function ToolbarContainer(
       resolution={resolution}
       showNodeLabels={showNodeLabels}
       showEdgeLabels={showEdgeLabels}
+      canOpenSimulator={canOpenSimulator}
       canUndo={canUndo}
       canRedo={canRedo}
       nodeCount={document.nodes.length}

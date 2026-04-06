@@ -8,6 +8,7 @@ export type ToolbarProps = {
   resolution: number;
   showNodeLabels: boolean;
   showEdgeLabels: boolean;
+  canOpenSimulator: boolean;
   canUndo: boolean;
   canRedo: boolean;
   nodeCount: number;
@@ -16,6 +17,7 @@ export type ToolbarProps = {
   onUploadMap: () => void;
   onLoadJson: () => void;
   onSaveJson: () => void;
+  onOpenSimulator: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onSetNodeType: (type: NodeType) => void;
@@ -59,6 +61,14 @@ export function Toolbar(props: ToolbarProps) {
           </button>
           <button type="button" className="ghost-button" onClick={props.onSaveJson}>
             Save
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={props.onOpenSimulator}
+            disabled={!props.canOpenSimulator}
+          >
+            Simulator
           </button>
         </div>
       </div>
