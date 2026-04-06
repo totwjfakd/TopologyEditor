@@ -1,4 +1,4 @@
-import type { SimulatorSpeed } from "../simulator/types";
+import { SIMULATOR_SPEED_OPTIONS, type SimulatorSpeed } from "../simulator/types";
 
 export type SimulatorToolbarProps = {
   mapLabel: string | null;
@@ -65,27 +65,16 @@ export function SimulatorToolbar(props: SimulatorToolbarProps) {
       <div className="toolbar-section">
         <span className="toolbar-label">Speed</span>
         <div className="toolbar-actions">
-          <button
-            type="button"
-            className={`edge-toggle ${props.speed === 1 ? "is-active" : ""}`}
-            onClick={() => props.onSetSpeed(1)}
-          >
-            1x
-          </button>
-          <button
-            type="button"
-            className={`edge-toggle ${props.speed === 2 ? "is-active" : ""}`}
-            onClick={() => props.onSetSpeed(2)}
-          >
-            2x
-          </button>
-          <button
-            type="button"
-            className={`edge-toggle ${props.speed === 4 ? "is-active" : ""}`}
-            onClick={() => props.onSetSpeed(4)}
-          >
-            4x
-          </button>
+          {SIMULATOR_SPEED_OPTIONS.map((speedOption) => (
+            <button
+              key={speedOption}
+              type="button"
+              className={`edge-toggle ${props.speed === speedOption ? "is-active" : ""}`}
+              onClick={() => props.onSetSpeed(speedOption)}
+            >
+              {speedOption}x
+            </button>
+          ))}
         </div>
       </div>
 

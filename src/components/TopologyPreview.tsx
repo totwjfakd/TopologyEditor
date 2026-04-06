@@ -167,7 +167,9 @@ export function TopologyPreview(props: TopologyPreviewProps) {
                 />
                 <circle cx="-10" cy="0" r="3.5" className="simulator-robot-tail" />
                 <polygon points="17,0 7,-7 7,7" className="simulator-robot-front" />
-                {robot.blockedByRobotId ? <circle r="21" className="simulator-robot-blocked" /> : null}
+                {robot.status === "waiting_resource" || robot.blockedByRobotId ? (
+                  <circle r="21" className="simulator-robot-blocked" />
+                ) : null}
               </g>
               <g transform={`translate(${point.x} ${point.y})`}>
                 <text x="0" y="-18" textAnchor="middle" className="simulator-robot-name">

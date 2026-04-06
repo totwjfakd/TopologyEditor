@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MapRaster, TopologyDocument, TopologyNode } from "../types";
 import type {
   CompiledMissionSummary,
@@ -42,8 +42,38 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
     () => new Map(props.compiledMissionSummaries.map((summary) => [summary.id, summary])),
     [props.compiledMissionSummaries],
   );
+  const [expandedMissionId, setExpandedMissionId] = useState<string | null>(null);
+  const previousMissionCountRef = useRef(0);
   const totalCallsPerHour = props.missions.reduce((sum, mission) => sum + mission.callsPerHour, 0);
   const timelineValue = Math.min(props.snapshot.currentTimeMs, props.timelineMaxMs);
+  const queueFillPercent = props.snapshot.maxPendingMissionCount > 0
+    ? Math.min(100, (props.snapshot.pendingMissionCount / props.snapshot.maxPendingMissionCount) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (props.missions.length === 0) {
+      previousMissionCountRef.current = 0;
+      if (expandedMissionId !== null) {
+        setExpandedMissionId(null);
+      }
+      return;
+    }
+
+    const previousMissionCount = previousMissionCountRef.current;
+    const hasExpandedMission =
+      expandedMissionId !== null && props.missions.some((mission) => mission.id === expandedMissionId);
+    const missionCountIncreased = props.missions.length > previousMissionCount;
+
+    if (missionCountIncreased) {
+      setExpandedMissionId(props.missions[props.missions.length - 1].id);
+    } else if (expandedMissionId !== null && !hasExpandedMission) {
+      setExpandedMissionId(props.missions[props.missions.length - 1].id);
+    } else if (previousMissionCount === 0 && expandedMissionId === null) {
+      setExpandedMissionId(props.missions[0].id);
+    }
+
+    previousMissionCountRef.current = props.missions.length;
+  }, [expandedMissionId, props.missions]);
 
   return (
     <>
@@ -209,163 +239,237 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
                     const summary = compiledMissionMap.get(mission.id);
                     const isCustomRate =
                       props.customRateMissionId === mission.id || !MISSION_CALL_PRESETS.includes(mission.callsPerHour);
+                    const isExpanded = expandedMissionId === mission.id;
+                    const routeSummary = mission.stops
+                      .map((stopId) => props.destinationNodeMap.get(stopId)?.name ?? "Unknown")
+                      .join(" -> ");
 
                     return (
-                      <section key={mission.id} className="simulator-mission-card">
+                      <section
+                        key={mission.id}
+                        className={`simulator-mission-card ${isExpanded ? "is-expanded" : "is-collapsed"}`}
+                      >
                         <div className="simulator-mission-header">
                           <div className="simulator-mission-title">
                             <strong>{mission.name}</strong>
-                            <span>{mission.stops.length} stops</span>
+                            <span>
+                              {mission.stops.length} stops · {mission.callsPerHour.toFixed(1)}/h
+                            </span>
                           </div>
-                          <button
-                            type="button"
-                            className="ghost-button danger"
-                            onClick={() => props.onRemoveMission(mission.id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-
-                        <label>
-                          <span>Name</span>
-                          <input
-                            value={mission.name}
-                            onChange={(event) =>
-                              props.onUpdateMission(mission.id, (current) => ({
-                                ...current,
-                                name: event.target.value || `Mission ${index + 1}`,
-                              }))
-                            }
-                          />
-                        </label>
-
-                        <div className="simulator-rate-field">
-                          <div className="simulator-rate-label">
-                            <span>Calls / hour</span>
-                            <strong>{mission.callsPerHour.toFixed(1)}/h</strong>
-                          </div>
-                          <div className="simulator-rate-toggle">
-                            {MISSION_CALL_PRESETS.map((preset) => (
-                              <button
-                                key={`${mission.id}-${preset}`}
-                                type="button"
-                                className={`edge-toggle ${mission.callsPerHour === preset ? "is-active" : ""}`}
-                                onClick={() => {
-                                  props.onSetCustomRateMissionId(null);
-                                  props.onUpdateMission(mission.id, (current) => ({
-                                    ...current,
-                                    callsPerHour: preset,
-                                  }));
-                                }}
-                              >
-                                {preset}/h
-                              </button>
-                            ))}
+                          <div className="simulator-mission-actions">
                             <button
                               type="button"
-                              className={`edge-toggle ${isCustomRate ? "is-active" : ""}`}
+                              className="ghost-button"
                               onClick={() =>
-                                props.onSetCustomRateMissionId(
-                                  props.customRateMissionId === mission.id ? null : mission.id,
+                                setExpandedMissionId((current) =>
+                                  current === mission.id ? null : mission.id,
                                 )
                               }
                             >
-                              Custom
+                              {isExpanded ? "Close" : "Edit"}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button danger"
+                              onClick={() => props.onRemoveMission(mission.id)}
+                            >
+                              Remove
                             </button>
                           </div>
-                          {isCustomRate ? (
-                            <label className="simulator-rate-custom">
-                              <span>Direct input</span>
+                        </div>
+
+                        <div className="simulator-mission-overview">
+                          <div className="simulator-mission-summary">{routeSummary}</div>
+
+                          <div className={`simulator-mission-validity ${summary?.isValid ? "is-valid" : "is-invalid"}`}>
+                            <strong>{summary?.isValid ? "Reachable" : "Invalid Route"}</strong>
+                            <span>
+                              {summary?.isValid
+                                ? `${summary.loadedDistanceM.toFixed(2)}m loaded path`
+                                : summary?.error ?? "Path unavailable"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isExpanded ? (
+                          <>
+                            <label>
+                              <span>Name</span>
                               <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={mission.callsPerHour}
+                                value={mission.name}
                                 onChange={(event) =>
                                   props.onUpdateMission(mission.id, (current) => ({
                                     ...current,
-                                    callsPerHour: props.clampMissionCalls(event.target.value),
+                                    name: event.target.value || `Mission ${index + 1}`,
                                   }))
                                 }
                               />
-                              <em>calls/hour</em>
                             </label>
-                          ) : null}
-                        </div>
 
-                        <div className="simulator-stop-list">
-                          {mission.stops.map((stopId, stopIndex) => (
-                            <label key={`${mission.id}-stop-${stopIndex}`}>
-                              <span>Stop {stopIndex + 1}</span>
-                              <select
-                                value={stopId}
-                                onChange={(event) =>
+                            <div className="simulator-rate-field">
+                              <div className="simulator-rate-label">
+                                <span>Calls / hour</span>
+                                <strong>{mission.callsPerHour.toFixed(1)}/h</strong>
+                              </div>
+                              <div className="simulator-rate-toggle">
+                                {MISSION_CALL_PRESETS.map((preset) => (
+                                  <button
+                                    key={`${mission.id}-${preset}`}
+                                    type="button"
+                                    className={`edge-toggle ${mission.callsPerHour === preset ? "is-active" : ""}`}
+                                    onClick={() => {
+                                      props.onSetCustomRateMissionId(null);
+                                      props.onUpdateMission(mission.id, (current) => ({
+                                        ...current,
+                                        callsPerHour: preset,
+                                      }));
+                                    }}
+                                  >
+                                    {preset}/h
+                                  </button>
+                                ))}
+                                <button
+                                  type="button"
+                                  className={`edge-toggle ${isCustomRate ? "is-active" : ""}`}
+                                  onClick={() =>
+                                    props.onSetCustomRateMissionId(
+                                      props.customRateMissionId === mission.id ? null : mission.id,
+                                    )
+                                  }
+                                >
+                                  Custom
+                                </button>
+                              </div>
+                              {isCustomRate ? (
+                                <label className="simulator-rate-custom">
+                                  <span>Direct input</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={mission.callsPerHour}
+                                    onChange={(event) =>
+                                      props.onUpdateMission(mission.id, (current) => ({
+                                        ...current,
+                                        callsPerHour: props.clampMissionCalls(event.target.value),
+                                      }))
+                                    }
+                                  />
+                                  <em>calls/hour</em>
+                                </label>
+                              ) : null}
+                            </div>
+
+                            <div className="simulator-stop-list">
+                              {mission.stops.map((stopId, stopIndex) => (
+                                <label key={`${mission.id}-stop-${stopIndex}`}>
+                                  <span>Stop {stopIndex + 1}</span>
+                                  <select
+                                    value={stopId}
+                                    onChange={(event) =>
+                                      props.onUpdateMission(mission.id, (current) => ({
+                                        ...current,
+                                        stops: current.stops.map((entry, entryIndex) =>
+                                          entryIndex === stopIndex ? event.target.value : entry,
+                                        ),
+                                      }))
+                                    }
+                                  >
+                                    {props.destinationNodes.map((node) => (
+                                      <option key={node.id} value={node.id}>
+                                        {node.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ))}
+                            </div>
+
+                            <div className="sidebar-actions">
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() =>
                                   props.onUpdateMission(mission.id, (current) => ({
                                     ...current,
-                                    stops: current.stops.map((entry, entryIndex) =>
-                                      entryIndex === stopIndex ? event.target.value : entry,
-                                    ),
+                                    stops: current.stops.concat(current.stops[current.stops.length - 1]),
                                   }))
                                 }
                               >
-                                {props.destinationNodes.map((node) => (
-                                  <option key={node.id} value={node.id}>
-                                    {node.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ))}
-                        </div>
-
-                        <div className="sidebar-actions">
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() =>
-                              props.onUpdateMission(mission.id, (current) => ({
-                                ...current,
-                                stops: current.stops.concat(current.stops[current.stops.length - 1]),
-                              }))
-                            }
-                          >
-                            Add Stop
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() =>
-                              props.onUpdateMission(mission.id, (current) => ({
-                                ...current,
-                                stops: current.stops.slice(0, -1),
-                              }))
-                            }
-                            disabled={mission.stops.length <= 2}
-                          >
-                            Remove Stop
-                          </button>
-                        </div>
-
-                        <div className={`simulator-mission-validity ${summary?.isValid ? "is-valid" : "is-invalid"}`}>
-                          <strong>{summary?.isValid ? "Reachable" : "Invalid Route"}</strong>
-                          <span>
-                            {summary?.isValid
-                              ? `${summary.loadedDistanceM.toFixed(2)}m loaded path`
-                              : summary?.error ?? "Path unavailable"}
-                          </span>
-                        </div>
-
-                        <div className="simulator-mission-summary">
-                          {mission.stops
-                            .map((stopId) => props.destinationNodeMap.get(stopId)?.name ?? "Unknown")
-                            .join(" -> ")}
-                        </div>
+                                Add Stop
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() =>
+                                  props.onUpdateMission(mission.id, (current) => ({
+                                    ...current,
+                                    stops: current.stops.slice(0, -1),
+                                  }))
+                                }
+                                disabled={mission.stops.length <= 2}
+                              >
+                                Remove Stop
+                              </button>
+                            </div>
+                          </>
+                        ) : null}
                       </section>
                     );
                   })}
                 </div>
               </>
             ) : null}
+          </div>
+        </section>
+
+        <section className="sidebar-panel">
+          <div className="sidebar-header">
+            <div>
+              <h2>Mission Queue</h2>
+              <p>Pending missions waiting for an idle robot.</p>
+            </div>
+          </div>
+          <div className="sidebar-form">
+            <div className="metric-row">
+              <span>
+                {props.snapshot.pendingMissionCount} / {props.snapshot.maxPendingMissionCount} pending
+              </span>
+              <span>
+                Oldest{" "}
+                {props.snapshot.oldestPendingWaitMs === null
+                  ? "none"
+                  : formatSimulationTime(props.snapshot.oldestPendingWaitMs)}
+              </span>
+              <span>{props.snapshot.droppedMissionCount} dropped</span>
+            </div>
+
+            <div className="simulator-queue-meter" aria-hidden="true">
+              <div
+                className={`simulator-queue-meter-fill ${props.snapshot.pendingMissionCount >= props.snapshot.maxPendingMissionCount ? "is-full" : ""}`}
+                style={{ width: `${queueFillPercent}%` }}
+              />
+            </div>
+
+            <div className="simulator-list">
+              {props.snapshot.pendingMissions.map((mission) => (
+                <div key={mission.id} className="simulator-list-card">
+                  <div className="simulator-list-row">
+                    <strong>{mission.name}</strong>
+                    <span>{formatSimulationTime(mission.waitMs)}</span>
+                  </div>
+                  <div className="simulator-list-route">
+                    {mission.stopNames.join(" -> ")}
+                  </div>
+                </div>
+              ))}
+
+              {props.snapshot.pendingMissions.length === 0 ? (
+                <div className="sidebar-empty">
+                  <p>모든 pending mission은 여기에서 backlog로 보입니다.</p>
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
 
@@ -386,7 +490,11 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
                   </span>
                 </div>
                 <div className="simulator-list-row muted">
-                  <span>{robot.currentMissionName ?? "Idle queue"}</span>
+                  <span>
+                    {robot.waitReason
+                      ? `${formatWaitReason(robot.waitReason)} · ${robot.waitingForLabel ?? "resource"}`
+                      : robot.currentMissionName ?? "Idle queue"}
+                  </span>
                   <span>{robot.totalDistanceM.toFixed(1)}m</span>
                 </div>
               </div>
@@ -446,7 +554,7 @@ function formatRobotStatus(status: string) {
   if (status === "moving_empty") {
     return "Empty";
   }
-  if (status === "waiting_forward") {
+  if (status === "waiting_resource") {
     return "Blocked";
   }
 
@@ -457,21 +565,53 @@ function formatEventType(type: string) {
   if (type === "mission_created") {
     return "Created";
   }
+  if (type === "mission_dropped") {
+    return "Dropped";
+  }
   if (type === "mission_assigned") {
     return "Assigned";
+  }
+  if (type === "robot_ready_to_enter_edge") {
+    return "Ready";
+  }
+  if (type === "edge_blocked") {
+    return "Edge Blocked";
+  }
+  if (type === "edge_enter_granted") {
+    return "Granted";
   }
   if (type === "edge_entered") {
     return "Edge";
   }
+  if (type === "robot_wait_started") {
+    return "Wait Start";
+  }
+  if (type === "robot_wait_finished") {
+    return "Wait End";
+  }
+  if (type === "node_conflict") {
+    return "Node Conflict";
+  }
+  if (type === "reservation_released") {
+    return "Released";
+  }
   if (type === "node_arrived") {
     return "Arrived";
   }
-  if (type === "robot_waiting") {
-    return "Blocked";
-  }
-  if (type === "robot_resumed") {
-    return "Resumed";
-  }
 
   return "Done";
+}
+
+function formatWaitReason(reason: string) {
+  if (reason === "node_occupancy") {
+    return "Node";
+  }
+  if (reason === "minimum_headway") {
+    return "Headway";
+  }
+  if (reason === "bidirectional_mutual_exclusion") {
+    return "Opposite";
+  }
+
+  return "Edge";
 }

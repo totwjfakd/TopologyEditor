@@ -2,15 +2,19 @@ import type { Point, TopologyDocument, TopologyNode } from "../types";
 import { planMissionRoute, buildRobotGraph } from "./planner";
 import { normalizeSeed, sampleExponentialMs } from "./random";
 import {
-  getRobotAxes,
-  getRobotFrontPoint,
-  getRobotSupportExtent,
-  ROBOT_FORWARD_CLEARANCE_M,
-  ROBOT_HALF_WIDTH_M,
-} from "./robotGeometry";
+  createTrafficState,
+  evaluateEdgeEntry,
+  MIN_SAME_EDGE_HEADWAY_M,
+  occupyNode,
+  releaseEdge,
+  releaseNode,
+  reserveEdge,
+  type TrafficState,
+} from "./traffic";
 import type {
   CompiledMissionSummary,
   SimulationEvent,
+  SimulatorPendingMissionSnapshot,
   SimulationSnapshot,
   SimulatorFleetConfig,
   SimulatorMissionDraft,
@@ -18,6 +22,7 @@ import type {
   SimulatorRobotSnapshot,
   SimulatorRobotState,
   SimulatorRouteSegment,
+  SimulatorWaitState,
 } from "./types";
 
 type CompiledMissionTemplate = {
@@ -40,6 +45,14 @@ type ScheduledEvent =
   | {
       id: string;
       timeMs: number;
+      kind: "robot_ready_to_enter_edge";
+      robotId: string;
+      missionId: string;
+      routeIndex: number;
+    }
+  | {
+      id: string;
+      timeMs: number;
       kind: "robot_arrive_node";
       robotId: string;
       missionId: string;
@@ -51,6 +64,13 @@ type ScheduledEventInput =
       timeMs: number;
       kind: "mission_arrival";
       missionTemplateId: string;
+    }
+  | {
+      timeMs: number;
+      kind: "robot_ready_to_enter_edge";
+      robotId: string;
+      missionId: string;
+      routeIndex: number;
     }
   | {
       timeMs: number;
@@ -76,10 +96,12 @@ export type SimulationEngine = {
   nextMissionId: number;
   nextEventId: number;
   rngSeed: number;
+  droppedMissionCount: number;
+  traffic: TrafficState;
 };
 
 const MAX_EVENT_LOG = 500;
-const SAFETY_STEP_MS = 100;
+export const MAX_PENDING_MISSION_COUNT = 1000;
 
 export function createSimulationEngine(
   document: TopologyDocument,
@@ -107,6 +129,13 @@ export function createSimulationEngine(
     nextMissionId: 1,
     nextEventId: 1,
     rngSeed: normalizeSeed(fleet.seed),
+    droppedMissionCount: 0,
+    traffic: createTrafficState(
+      robots.map((robot) => ({
+        nodeId: robot.currentNodeId,
+        robotId: robot.id,
+      })),
+    ),
   };
 
   scheduleInitialArrivals(engine);
@@ -122,20 +151,25 @@ export function advanceSimulation(
 
   while (engine.timeMs < safeTargetTime) {
     const nextQueuedEventTime = engine.queue[0]?.timeMs ?? Number.POSITIVE_INFINITY;
-    const nextTime = Math.min(
-      safeTargetTime,
-      nextQueuedEventTime,
-      engine.timeMs + SAFETY_STEP_MS,
-    );
+    const nextTime = Math.min(safeTargetTime, nextQueuedEventTime);
+
+    if (!Number.isFinite(nextTime)) {
+      engine.timeMs = safeTargetTime;
+      break;
+    }
 
     engine.timeMs = nextTime;
-    updateRobotForwardBlocking(engine);
 
     while (engine.queue.length > 0 && engine.queue[0].timeMs <= engine.timeMs) {
       const nextEvent = engine.queue.shift()!;
 
       if (nextEvent.kind === "mission_arrival") {
         processMissionArrival(engine, nextEvent, fleet);
+        continue;
+      }
+
+      if (nextEvent.kind === "robot_ready_to_enter_edge") {
+        processRobotReadyToEnterEdge(engine, nextEvent, fleet);
         continue;
       }
 
@@ -150,12 +184,17 @@ export function buildSimulationSnapshot(engine: SimulationEngine): SimulationSna
   const completedMissionCount = Array.from(engine.missionMap.values()).filter(
     (mission) => mission.status === "completed",
   ).length;
+  const pendingMissions = buildPendingMissionSnapshots(engine);
 
   return {
     currentTimeMs: engine.timeMs,
     robots: engine.robots.map((robot) => buildRobotSnapshot(engine, robot)),
     recentEvents: engine.events.slice(-18).reverse(),
     pendingMissionCount,
+    maxPendingMissionCount: MAX_PENDING_MISSION_COUNT,
+    droppedMissionCount: engine.droppedMissionCount,
+    oldestPendingWaitMs: pendingMissions[0]?.waitMs ?? null,
+    pendingMissions,
     activeMissionCount,
     completedMissionCount,
     totalEventCount: engine.events.length,
@@ -246,6 +285,7 @@ function createRobots(document: TopologyDocument, requestedCount: number) {
       routeSegments: [],
       routeIndex: 0,
       motion: null,
+      waitState: null,
     };
   });
 }
@@ -267,6 +307,20 @@ function processMissionArrival(
 ) {
   const template = engine.templateMap.get(event.missionTemplateId);
   if (!template) {
+    return;
+  }
+
+  scheduleNextMissionArrival(engine, template.id, event.timeMs);
+
+  if (engine.pendingMissionIds.length >= MAX_PENDING_MISSION_COUNT) {
+    engine.droppedMissionCount += 1;
+    pushLog(engine, {
+      type: "mission_dropped",
+      timeMs: event.timeMs,
+      robotId: null,
+      missionId: null,
+      message: `${template.name} dropped because the queue is full (${MAX_PENDING_MISSION_COUNT})`,
+    });
     return;
   }
 
@@ -295,7 +349,7 @@ function processMissionArrival(
     message: `${template.name} created`,
   });
 
-  dispatchPendingMissions(engine, fleet);
+  processTrafficQueue(engine, fleet);
 }
 
 function processRobotArrival(
@@ -309,31 +363,20 @@ function processRobotArrival(
     return;
   }
 
-  if (robot.motion.blockedAtMs !== null) {
-    scheduleEvent(engine, {
-      kind: "robot_arrive_node",
-      timeMs: engine.timeMs + SAFETY_STEP_MS,
-      robotId: robot.id,
-      missionId: mission.id,
-      routeIndex: robot.routeIndex,
-    });
-    return;
-  }
-
-  if (event.timeMs + 1 < robot.motion.endsAtMs) {
-    scheduleEvent(engine, {
-      kind: "robot_arrive_node",
-      timeMs: robot.motion.endsAtMs,
-      robotId: robot.id,
-      missionId: mission.id,
-      routeIndex: robot.routeIndex,
-    });
-    return;
-  }
-
   const segment = robot.routeSegments[event.routeIndex];
   if (!segment) {
     return;
+  }
+
+  const releasedEdgeReservations = releaseEdge(engine.traffic, segment.edgeId, robot.id);
+  for (const reservation of releasedEdgeReservations) {
+    pushLog(engine, {
+      type: "reservation_released",
+      timeMs: event.timeMs,
+      robotId: robot.id,
+      missionId: mission.id,
+      message: `${robot.name} released edge ${reservation.fromNodeId} -> ${reservation.toNodeId}`,
+    });
   }
 
   robot.currentNodeId = segment.toNodeId;
@@ -356,6 +399,7 @@ function processRobotArrival(
     robot.currentMissionName = null;
     robot.routeSegments = [];
     robot.routeIndex = 0;
+    robot.waitState = null;
     mission.status = "completed";
     mission.completedAtMs = event.timeMs;
     robot.completedMissionCount += 1;
@@ -368,11 +412,36 @@ function processRobotArrival(
       message: `${robot.name} completed ${mission.name}`,
     });
 
-    dispatchPendingMissions(engine, fleet);
+    processTrafficQueue(engine, fleet);
     return;
   }
 
-  startRobotSegment(engine, robot, mission, event.timeMs, fleet);
+  scheduleEvent(engine, {
+    kind: "robot_ready_to_enter_edge",
+    timeMs: event.timeMs,
+    robotId: robot.id,
+    missionId: mission.id,
+    routeIndex: robot.routeIndex,
+  });
+  processTrafficQueue(engine, fleet);
+}
+
+function processRobotReadyToEnterEdge(
+  engine: SimulationEngine,
+  event: Extract<ScheduledEvent, { kind: "robot_ready_to_enter_edge" }>,
+  fleet: SimulatorFleetConfig,
+) {
+  const robot = engine.robots.find((entry) => entry.id === event.robotId);
+  const mission = engine.missionMap.get(event.missionId);
+  if (!robot || !mission || robot.currentMissionId !== mission.id || robot.routeIndex !== event.routeIndex) {
+    return;
+  }
+
+  if (robot.motion) {
+    return;
+  }
+
+  attemptRobotEdgeEntry(engine, robot, mission, event.timeMs, fleet);
 }
 
 function dispatchPendingMissions(engine: SimulationEngine, fleet: SimulatorFleetConfig) {
@@ -406,6 +475,7 @@ function dispatchPendingMissions(engine: SimulationEngine, fleet: SimulatorFleet
     bestRobot.robot.currentMissionName = mission.name;
     bestRobot.robot.routeSegments = bestRobot.route;
     bestRobot.robot.routeIndex = 0;
+    bestRobot.robot.waitState = null;
 
     pushLog(engine, {
       type: "mission_assigned",
@@ -415,12 +485,18 @@ function dispatchPendingMissions(engine: SimulationEngine, fleet: SimulatorFleet
       message: `${bestRobot.robot.name} assigned to ${mission.name}`,
     });
 
-    startRobotSegment(engine, bestRobot.robot, mission, engine.timeMs, fleet);
+    scheduleEvent(engine, {
+      kind: "robot_ready_to_enter_edge",
+      timeMs: engine.timeMs,
+      robotId: bestRobot.robot.id,
+      missionId: mission.id,
+      routeIndex: 0,
+    });
     assignedAny = true;
   }
 }
 
-function startRobotSegment(
+function attemptRobotEdgeEntry(
   engine: SimulationEngine,
   robot: SimulatorRobotState,
   mission: SimulatorMissionInstance,
@@ -429,11 +505,56 @@ function startRobotSegment(
 ) {
   const segment = robot.routeSegments[robot.routeIndex];
   if (!segment) {
-    return;
+    return false;
   }
 
+  pushLog(engine, {
+    type: "robot_ready_to_enter_edge",
+    timeMs: startTimeMs,
+    robotId: robot.id,
+    missionId: mission.id,
+    message: `${robot.name} ready to enter ${engine.nodeMap.get(segment.fromNodeId)?.name ?? segment.fromNodeId} -> ${engine.nodeMap.get(segment.toNodeId)?.name ?? segment.toNodeId}`,
+  });
+
   const speedMps = Math.max(0.1, fleet.robotSpeedMps);
+  const headwayMs = (MIN_SAME_EDGE_HEADWAY_M / speedMps) * 1000;
+  const gate = evaluateEdgeEntry(engine.traffic, {
+    robotId: robot.id,
+    edgeId: segment.edgeId,
+    fromNodeId: segment.fromNodeId,
+    toNodeId: segment.toNodeId,
+    targetNodeId: segment.toNodeId,
+    nowMs: startTimeMs,
+    headwayMs,
+  });
+
+  if (!gate.allowed) {
+    applyWaitState(engine, robot, mission.id, startTimeMs, gate);
+    return false;
+  }
+
+  clearWaitState(engine, robot, mission.id, startTimeMs);
+  releaseNodeReservationForDeparture(engine, robot, mission.id, startTimeMs);
+
   const durationMs = (segment.distanceM / speedMps) * 1000;
+  occupyNode(engine.traffic, segment.toNodeId, robot.id);
+  reserveEdge(engine.traffic, {
+    edgeId: segment.edgeId,
+    robotId: robot.id,
+    fromNodeId: segment.fromNodeId,
+    toNodeId: segment.toNodeId,
+    enteredAtMs: startTimeMs,
+    releaseAtMs: startTimeMs + durationMs,
+  });
+
+  pushLog(engine, {
+    type: "edge_enter_granted",
+    timeMs: startTimeMs,
+    robotId: robot.id,
+    missionId: mission.id,
+    message: `${robot.name} granted ${engine.nodeMap.get(segment.fromNodeId)?.name ?? segment.fromNodeId} -> ${engine.nodeMap.get(segment.toNodeId)?.name ?? segment.toNodeId}`,
+  });
+
   robot.status = segment.loaded ? "moving_loaded" : "moving_empty";
   robot.motion = {
     edgeId: segment.edgeId,
@@ -443,8 +564,6 @@ function startRobotSegment(
     loaded: segment.loaded,
     startedAtMs: startTimeMs,
     endsAtMs: startTimeMs + durationMs,
-    blockedAtMs: null,
-    blockedByRobotId: null,
   };
 
   pushLog(engine, {
@@ -462,6 +581,137 @@ function startRobotSegment(
     missionId: mission.id,
     routeIndex: robot.routeIndex,
   });
+  return true;
+}
+
+function processTrafficQueue(engine: SimulationEngine, fleet: SimulatorFleetConfig) {
+  let progressed = true;
+
+  while (progressed) {
+    const startedWaitingRobots = retryWaitingRobots(engine, fleet);
+    const beforePending = engine.pendingMissionIds.length;
+    const beforeMoving = engine.robots.filter((robot) => robot.motion).length;
+    dispatchPendingMissions(engine, fleet);
+    const afterMoving = engine.robots.filter((robot) => robot.motion).length;
+    progressed =
+      startedWaitingRobots ||
+      engine.pendingMissionIds.length !== beforePending ||
+      afterMoving !== beforeMoving;
+  }
+}
+
+function retryWaitingRobots(engine: SimulationEngine, fleet: SimulatorFleetConfig) {
+  let startedAny = false;
+
+  const waitingRobots = engine.robots
+    .filter((robot) => robot.status === "waiting_resource" && robot.currentMissionId)
+    .filter((robot) => robot.waitState?.retryAtMs === null)
+    .sort((a, b) => (a.waitState?.startedAtMs ?? 0) - (b.waitState?.startedAtMs ?? 0));
+
+  for (const robot of waitingRobots) {
+    const mission = engine.missionMap.get(robot.currentMissionId ?? "");
+    if (!mission) {
+      continue;
+    }
+
+    if (attemptRobotEdgeEntry(engine, robot, mission, engine.timeMs, fleet)) {
+      startedAny = true;
+    }
+  }
+
+  return startedAny;
+}
+
+function releaseNodeReservationForDeparture(
+  engine: SimulationEngine,
+  robot: SimulatorRobotState,
+  missionId: string,
+  timeMs: number,
+) {
+  if (releaseNode(engine.traffic, robot.currentNodeId, robot.id)) {
+    pushLog(engine, {
+      type: "reservation_released",
+      timeMs,
+      robotId: robot.id,
+      missionId,
+      message: `${robot.name} released node ${engine.nodeMap.get(robot.currentNodeId)?.name ?? robot.currentNodeId}`,
+    });
+  }
+}
+
+function applyWaitState(
+  engine: SimulationEngine,
+  robot: SimulatorRobotState,
+  missionId: string,
+  timeMs: number,
+  gate: Exclude<ReturnType<typeof evaluateEdgeEntry>, { allowed: true }>,
+) {
+  const nextWaitState: SimulatorWaitState = {
+    reason: gate.reason,
+    resourceType: gate.resourceType,
+    resourceId: gate.resourceId,
+    blockerRobotId: gate.blockerRobotId,
+    startedAtMs: robot.waitState?.startedAtMs ?? timeMs,
+    retryAtMs: gate.retryAtMs,
+    waitingForLabel: gate.waitingForLabel,
+  };
+
+  const changed =
+    robot.status !== "waiting_resource" ||
+    robot.waitState?.reason !== nextWaitState.reason ||
+    robot.waitState?.resourceId !== nextWaitState.resourceId ||
+    robot.waitState?.blockerRobotId !== nextWaitState.blockerRobotId;
+
+  robot.status = "waiting_resource";
+  robot.motion = null;
+  robot.waitState = nextWaitState;
+
+  if (changed) {
+    pushLog(engine, {
+      type: gate.reason === "node_occupancy" ? "node_conflict" : "edge_blocked",
+      timeMs,
+      robotId: robot.id,
+      missionId,
+      message: `${robot.name} blocked by ${nextWaitState.waitingForLabel}`,
+    });
+    pushLog(engine, {
+      type: "robot_wait_started",
+      timeMs,
+      robotId: robot.id,
+      missionId,
+      message: `${robot.name} waiting for ${nextWaitState.waitingForLabel}`,
+    });
+  }
+
+  if (gate.retryAtMs !== null) {
+    scheduleEvent(engine, {
+      kind: "robot_ready_to_enter_edge",
+      timeMs: Math.max(timeMs + 1, gate.retryAtMs),
+      robotId: robot.id,
+      missionId,
+      routeIndex: robot.routeIndex,
+    });
+  }
+}
+
+function clearWaitState(
+  engine: SimulationEngine,
+  robot: SimulatorRobotState,
+  missionId: string,
+  timeMs: number,
+) {
+  if (!robot.waitState) {
+    return;
+  }
+
+  pushLog(engine, {
+    type: "robot_wait_finished",
+    timeMs,
+    robotId: robot.id,
+    missionId,
+    message: `${robot.name} resumed after waiting for ${robot.waitState.waitingForLabel}`,
+  });
+  robot.waitState = null;
 }
 
 function selectRobotForMission(
@@ -529,7 +779,13 @@ function scheduleEvent(
   } as ScheduledEvent;
   engine.nextEventId += 1;
   engine.queue.push(scheduledEvent);
-  engine.queue.sort((a, b) => a.timeMs - b.timeMs);
+  engine.queue.sort((a, b) => {
+    if (a.timeMs !== b.timeMs) {
+      return a.timeMs - b.timeMs;
+    }
+
+    return getScheduledEventPriority(a.kind) - getScheduledEventPriority(b.kind);
+  });
 }
 
 function pushLog(
@@ -544,13 +800,22 @@ function pushLog(
   if (engine.events.length > MAX_EVENT_LOG) {
     engine.events.splice(0, engine.events.length - MAX_EVENT_LOG);
   }
+}
 
-  if (event.type === "mission_created") {
-    const mission = engine.missionMap.get(event.missionId ?? "");
-    if (mission) {
-      scheduleNextMissionArrival(engine, mission.templateId, event.timeMs);
+function buildPendingMissionSnapshots(engine: SimulationEngine): SimulatorPendingMissionSnapshot[] {
+  return engine.pendingMissionIds.slice(0, 8).flatMap((missionId) => {
+    const mission = engine.missionMap.get(missionId);
+    if (!mission) {
+      return [];
     }
-  }
+
+    return [{
+      id: mission.id,
+      name: mission.name,
+      waitMs: Math.max(0, engine.timeMs - mission.createdAtMs),
+      stopNames: mission.stops.map((stopId) => engine.nodeMap.get(stopId)?.name ?? stopId),
+    }];
+  });
 }
 
 function buildRobotSnapshot(
@@ -565,7 +830,9 @@ function buildRobotSnapshot(
     status: robot.status,
     point,
     headingRad: getRobotHeading(engine, robot),
-    blockedByRobotId: robot.motion?.blockedByRobotId ?? null,
+    blockedByRobotId: robot.waitState?.blockerRobotId ?? null,
+    waitReason: robot.waitState?.reason ?? null,
+    waitingForLabel: robot.waitState?.waitingForLabel ?? null,
     currentMissionName: robot.currentMissionName,
     currentNodeId: robot.currentNodeId,
     targetNodeId: robot.motion?.toNodeId ?? null,
@@ -601,11 +868,10 @@ function getRobotProgress(engine: SimulationEngine, robot: SimulatorRobotState) 
     return 1;
   }
 
-  const effectiveTime = robot.motion.blockedAtMs ?? engine.timeMs;
   const duration = Math.max(1, robot.motion.endsAtMs - robot.motion.startedAtMs);
   return Math.max(
     0,
-    Math.min(1, (effectiveTime - robot.motion.startedAtMs) / duration),
+    Math.min(1, (engine.timeMs - robot.motion.startedAtMs) / duration),
   );
 }
 
@@ -661,99 +927,13 @@ function getRobotHeading(engine: SimulationEngine, robot: SimulatorRobotState) {
   return 0;
 }
 
-function updateRobotForwardBlocking(engine: SimulationEngine) {
-  const positions = engine.robots.map((robot) => ({
-    robot,
-    point: getRobotPoint(engine, robot),
-    heading: getRobotHeading(engine, robot),
-  }));
-
-  for (const current of positions) {
-    if (!current.robot.motion) {
-      continue;
-    }
-
-    const blocker = findForwardBlocker(current, positions);
-
-    if (blocker) {
-      if (current.robot.motion.blockedAtMs === null) {
-        current.robot.motion.blockedAtMs = engine.timeMs;
-        current.robot.motion.blockedByRobotId = blocker.robot.id;
-        current.robot.status = "waiting_forward";
-        pushLog(engine, {
-          type: "robot_waiting",
-          timeMs: engine.timeMs,
-          robotId: current.robot.id,
-          missionId: current.robot.currentMissionId,
-          message: `${current.robot.name} waiting for ${blocker.robot.name} ahead`,
-        });
-      }
-
-      continue;
-    }
-
-    if (current.robot.motion.blockedAtMs !== null) {
-      const blockedAtMs = current.robot.motion.blockedAtMs;
-      const pauseDuration = Math.max(0, engine.timeMs - blockedAtMs);
-      current.robot.motion.startedAtMs += pauseDuration;
-      current.robot.motion.endsAtMs += pauseDuration;
-      current.robot.motion.blockedAtMs = null;
-      current.robot.motion.blockedByRobotId = null;
-      current.robot.status = current.robot.motion.loaded ? "moving_loaded" : "moving_empty";
-      pushLog(engine, {
-        type: "robot_resumed",
-        timeMs: engine.timeMs,
-        robotId: current.robot.id,
-        missionId: current.robot.currentMissionId,
-        message: `${current.robot.name} resumed`,
-      });
-    }
+function getScheduledEventPriority(kind: ScheduledEvent["kind"]) {
+  if (kind === "mission_arrival") {
+    return 0;
   }
-}
-
-function findForwardBlocker(
-  current: { robot: SimulatorRobotState; point: Point; heading: number },
-  positions: Array<{ robot: SimulatorRobotState; point: Point; heading: number }>,
-) {
-  const { forward, lateral } = getRobotAxes(current.heading);
-  const frontPoint = getRobotFrontPoint(current.point, current.heading);
-  const reverseForward = {
-    x: -forward.x,
-    y: -forward.y,
-  };
-  let winner: { robot: SimulatorRobotState; forwardGap: number } | null = null;
-
-  for (const candidate of positions) {
-    if (candidate.robot.id === current.robot.id) {
-      continue;
-    }
-
-    const dx = candidate.point.x - frontPoint.x;
-    const dy = candidate.point.y - frontPoint.y;
-    const forwardDistance = dx * forward.x + dy * forward.y;
-    if (forwardDistance <= 0) {
-      continue;
-    }
-
-    const candidateForwardReach = getRobotSupportExtent(candidate.heading, reverseForward);
-    const candidateLateralReach = getRobotSupportExtent(candidate.heading, lateral);
-    const forwardGap = forwardDistance - candidateForwardReach;
-    if (forwardGap > ROBOT_FORWARD_CLEARANCE_M) {
-      continue;
-    }
-
-    const lateralDistance = Math.abs(dx * lateral.x + dy * lateral.y);
-    if (lateralDistance > ROBOT_HALF_WIDTH_M + candidateLateralReach) {
-      continue;
-    }
-
-    if (!winner || forwardGap < winner.forwardGap) {
-      winner = {
-        robot: candidate.robot,
-        forwardGap,
-      };
-    }
+  if (kind === "robot_arrive_node") {
+    return 1;
   }
 
-  return winner;
+  return 2;
 }

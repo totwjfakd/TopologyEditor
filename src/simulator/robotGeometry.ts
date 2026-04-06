@@ -3,7 +3,7 @@ import type { Point } from "../types";
 export const ROBOT_FRONT_OFFSET_M = 0.35;
 export const ROBOT_REAR_OFFSET_M = 0.35;
 export const ROBOT_HALF_WIDTH_M = 0.28;
-export const ROBOT_FORWARD_CLEARANCE_M = 0.5;
+export const ROBOT_FORWARD_CLEARANCE_M = 1;
 
 export function getRobotAxes(headingRad: number) {
   const forward = {

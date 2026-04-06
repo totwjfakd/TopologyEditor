@@ -788,11 +788,22 @@ select:focus-visible {
   background: color-mix(in srgb, var(--panel) 84%, white);
 }
 
+.simulator-mission-card.is-collapsed {
+  gap: 10px;
+}
+
 .simulator-mission-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+}
+
+.simulator-mission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .simulator-mission-title {
@@ -871,6 +882,11 @@ select:focus-visible {
   gap: 6px;
 }
 
+.simulator-mission-overview {
+  display: grid;
+  gap: 10px;
+}
+
 .simulator-mission-summary {
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -907,6 +923,27 @@ select:focus-visible {
 
 .simulator-mission-validity.is-invalid {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+}
+
+.simulator-queue-meter {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-muted);
+}
+
+.simulator-queue-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 72%, white);
+  transition: width 120ms ease;
+}
+
+.simulator-queue-meter-fill.is-full {
+  background: color-mix(in srgb, var(--danger) 72%, white);
 }
 
 .simulator-inline-field {
@@ -961,6 +998,13 @@ select:focus-visible {
   font-size: 0.82rem;
 }
 
+.simulator-list-route {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .simulator-status {
   display: inline-flex;
   align-items: center;
@@ -988,7 +1032,7 @@ select:focus-visible {
   color: #334155;
 }
 
-.simulator-status-waiting_forward {
+.simulator-status-waiting_resource {
   background: #fee2e2;
   color: #b91c1c;
 }

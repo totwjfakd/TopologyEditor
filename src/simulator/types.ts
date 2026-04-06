@@ -1,6 +1,8 @@
 import type { Point } from "../types";
 
-export type SimulatorSpeed = 1 | 2 | 4;
+export const SIMULATOR_SPEED_OPTIONS = [1, 2, 4, 8, 16, 32, 64] as const;
+
+export type SimulatorSpeed = (typeof SIMULATOR_SPEED_OPTIONS)[number];
 
 export type SimulatorMissionDraft = {
   id: string;
@@ -32,7 +34,13 @@ export type SimulatorRobotStatus =
   | "idle"
   | "moving_empty"
   | "moving_loaded"
-  | "waiting_forward";
+  | "waiting_resource";
+
+export type SimulatorWaitReason =
+  | "node_occupancy"
+  | "edge_occupancy"
+  | "minimum_headway"
+  | "bidirectional_mutual_exclusion";
 
 export type SimulatorMotion = {
   edgeId: string;
@@ -42,8 +50,16 @@ export type SimulatorMotion = {
   loaded: boolean;
   startedAtMs: number;
   endsAtMs: number;
-  blockedAtMs: number | null;
-  blockedByRobotId: string | null;
+};
+
+export type SimulatorWaitState = {
+  reason: SimulatorWaitReason;
+  resourceType: "node" | "edge";
+  resourceId: string;
+  blockerRobotId: string | null;
+  startedAtMs: number;
+  retryAtMs: number | null;
+  waitingForLabel: string;
 };
 
 export type SimulatorRobotState = {
@@ -58,6 +74,7 @@ export type SimulatorRobotState = {
   routeSegments: SimulatorRouteSegment[];
   routeIndex: number;
   motion: SimulatorMotion | null;
+  waitState: SimulatorWaitState | null;
 };
 
 export type SimulatorMissionStatus =
@@ -79,12 +96,18 @@ export type SimulatorMissionInstance = {
 
 export type SimulationEventType =
   | "mission_created"
+  | "mission_dropped"
   | "mission_assigned"
+  | "robot_ready_to_enter_edge"
+  | "edge_blocked"
+  | "edge_enter_granted"
   | "edge_entered"
+  | "robot_wait_started"
+  | "robot_wait_finished"
+  | "node_conflict"
+  | "reservation_released"
   | "node_arrived"
-  | "mission_completed"
-  | "robot_waiting"
-  | "robot_resumed";
+  | "mission_completed";
 
 export type SimulationEvent = {
   id: string;
@@ -102,6 +125,8 @@ export type SimulatorRobotSnapshot = {
   point: Point;
   headingRad: number;
   blockedByRobotId: string | null;
+  waitReason: SimulatorWaitReason | null;
+  waitingForLabel: string | null;
   currentMissionName: string | null;
   currentNodeId: string;
   targetNodeId: string | null;
@@ -111,11 +136,22 @@ export type SimulatorRobotSnapshot = {
   pathPoints: Point[];
 };
 
+export type SimulatorPendingMissionSnapshot = {
+  id: string;
+  name: string;
+  waitMs: number;
+  stopNames: string[];
+};
+
 export type SimulationSnapshot = {
   currentTimeMs: number;
   robots: SimulatorRobotSnapshot[];
   recentEvents: SimulationEvent[];
   pendingMissionCount: number;
+  maxPendingMissionCount: number;
+  droppedMissionCount: number;
+  oldestPendingWaitMs: number | null;
+  pendingMissions: SimulatorPendingMissionSnapshot[];
   activeMissionCount: number;
   completedMissionCount: number;
   totalEventCount: number;
