@@ -1,0 +1,695 @@
+{
+  "map": {
+    "image": "v2.pgm",
+    "resolution": 0.05,
+    "origin": [
+      -15,
+      -24.1,
+      0
+    ]
+  },
+  "nodes": [
+    {
+      "id": "node_006",
+      "type": "waypoint",
+      "name": "Waypoint 1",
+      "x": -13.49,
+      "y": 9.27,
+      "headingRad": null
+    },
+    {
+      "id": "node_007",
+      "type": "waypoint",
+      "name": "Waypoint 2",
+      "x": -13.63,
+      "y": 20.58,
+      "headingRad": null
+    },
+    {
+      "id": "node_008",
+      "type": "waypoint",
+      "name": "Waypoint 3",
+      "x": -9.21,
+      "y": 20.24,
+      "headingRad": null
+    },
+    {
+      "id": "node_009",
+      "type": "waypoint",
+      "name": "Waypoint 4",
+      "x": -4.97,
+      "y": 17.55,
+      "headingRad": null
+    },
+    {
+      "id": "node_010",
+      "type": "waypoint",
+      "name": "Waypoint 5",
+      "x": -4.92,
+      "y": 11.15,
+      "headingRad": null
+    },
+    {
+      "id": "node_011",
+      "type": "waypoint",
+      "name": "Waypoint 6",
+      "x": -4.49,
+      "y": 4.33,
+      "headingRad": null
+    },
+    {
+      "id": "node_012",
+      "type": "waypoint",
+      "name": "Waypoint 7",
+      "x": -4.38,
+      "y": -4.1,
+      "headingRad": null
+    },
+    {
+      "id": "node_013",
+      "type": "waypoint",
+      "name": "Waypoint 8",
+      "x": -4.81,
+      "y": -12.14,
+      "headingRad": null
+    },
+    {
+      "id": "node_014",
+      "type": "waypoint",
+      "name": "Waypoint 9",
+      "x": -4.87,
+      "y": -14.97,
+      "headingRad": null
+    },
+    {
+      "id": "node_015",
+      "type": "waypoint",
+      "name": "Waypoint 10",
+      "x": -8.75,
+      "y": -18.11,
+      "headingRad": null
+    },
+    {
+      "id": "node_016",
+      "type": "waypoint",
+      "name": "Waypoint 11",
+      "x": -1.08,
+      "y": -18.06,
+      "headingRad": null
+    },
+    {
+      "id": "node_017",
+      "type": "waypoint",
+      "name": "Waypoint 12",
+      "x": -12.53,
+      "y": -17.75,
+      "headingRad": null
+    },
+    {
+      "id": "node_018",
+      "type": "waypoint",
+      "name": "Waypoint 13",
+      "x": -13.39,
+      "y": -12.3,
+      "headingRad": null
+    },
+    {
+      "id": "node_019",
+      "type": "waypoint",
+      "name": "Waypoint 14",
+      "x": -13.45,
+      "y": -5.88,
+      "headingRad": null
+    },
+    {
+      "id": "node_020",
+      "type": "waypoint",
+      "name": "Waypoint 15",
+      "x": -11.72,
+      "y": -0.91,
+      "headingRad": null
+    },
+    {
+      "id": "node_021",
+      "type": "waypoint",
+      "name": "Waypoint 16",
+      "x": -0.42,
+      "y": 18.76,
+      "headingRad": null
+    },
+    {
+      "id": "node_022",
+      "type": "waypoint",
+      "name": "Waypoint 17",
+      "x": 5.83,
+      "y": 20.3,
+      "headingRad": null
+    },
+    {
+      "id": "node_023",
+      "type": "waypoint",
+      "name": "Waypoint 18",
+      "x": 11.2,
+      "y": 20.36,
+      "headingRad": null
+    },
+    {
+      "id": "node_024",
+      "type": "waypoint",
+      "name": "Waypoint 19",
+      "x": 4.09,
+      "y": 12.25,
+      "headingRad": null
+    },
+    {
+      "id": "node_025",
+      "type": "waypoint",
+      "name": "Waypoint 20",
+      "x": 4.04,
+      "y": 5.5,
+      "headingRad": null
+    },
+    {
+      "id": "node_026",
+      "type": "waypoint",
+      "name": "Waypoint 21",
+      "x": 4.14,
+      "y": -4.11,
+      "headingRad": null
+    },
+    {
+      "id": "node_027",
+      "type": "waypoint",
+      "name": "Waypoint 22",
+      "x": 3.94,
+      "y": -12.18,
+      "headingRad": null
+    },
+    {
+      "id": "node_028",
+      "type": "waypoint",
+      "name": "Waypoint 23",
+      "x": 4.39,
+      "y": -17.31,
+      "headingRad": null
+    },
+    {
+      "id": "node_029",
+      "type": "waypoint",
+      "name": "Waypoint 24",
+      "x": 10.4,
+      "y": -17.6,
+      "headingRad": null
+    },
+    {
+      "id": "node_030",
+      "type": "waypoint",
+      "name": "Waypoint 25",
+      "x": 12.53,
+      "y": -15.3,
+      "headingRad": null
+    },
+    {
+      "id": "node_031",
+      "type": "waypoint",
+      "name": "Waypoint 26",
+      "x": 13.03,
+      "y": -8.79,
+      "headingRad": null
+    },
+    {
+      "id": "node_032",
+      "type": "waypoint",
+      "name": "Waypoint 27",
+      "x": 12.3,
+      "y": 16.99,
+      "headingRad": null
+    },
+    {
+      "id": "node_033",
+      "type": "waypoint",
+      "name": "Waypoint 28",
+      "x": 13.11,
+      "y": 8.9,
+      "headingRad": null
+    },
+    {
+      "id": "node_034",
+      "type": "waypoint",
+      "name": "Waypoint 29",
+      "x": 12.71,
+      "y": 3.2,
+      "headingRad": null
+    },
+    {
+      "id": "node_035",
+      "type": "waypoint",
+      "name": "Waypoint 30",
+      "x": 11.74,
+      "y": -2.72,
+      "headingRad": null
+    },
+    {
+      "id": "node_037",
+      "type": "waypoint",
+      "name": "Waypoint 31",
+      "x": 1.25,
+      "y": -17.76,
+      "headingRad": null
+    },
+    {
+      "id": "node_038",
+      "type": "waypoint",
+      "name": "Waypoint 32",
+      "x": 4.3,
+      "y": 16.4,
+      "headingRad": null
+    },
+    {
+      "id": "node_039",
+      "type": "destination",
+      "name": "Destination 1",
+      "x": -11.67,
+      "y": 23.94,
+      "headingRad": -1.584
+    },
+    {
+      "id": "node_040",
+      "type": "destination",
+      "name": "Destination 2",
+      "x": -0.54,
+      "y": 23.54,
+      "headingRad": -1.535
+    },
+    {
+      "id": "node_041",
+      "type": "destination",
+      "name": "Destination 3",
+      "x": 10.41,
+      "y": 23.86,
+      "headingRad": -1.511
+    },
+    {
+      "id": "node_042",
+      "type": "destination",
+      "name": "Destination 4",
+      "x": 12.05,
+      "y": -22,
+      "headingRad": 1.61
+    },
+    {
+      "id": "node_043",
+      "type": "waiting_position",
+      "name": "Waiting Position 1",
+      "x": -12.51,
+      "y": -21.9,
+      "headingRad": 1.627
+    },
+    {
+      "id": "node_044",
+      "type": "waiting_position",
+      "name": "Waiting Position 2",
+      "x": -8.2,
+      "y": -22,
+      "headingRad": 1.572
+    },
+    {
+      "id": "node_045",
+      "type": "waiting_position",
+      "name": "Waiting Position 3",
+      "x": -0.86,
+      "y": -21.87,
+      "headingRad": 1.632
+    },
+    {
+      "id": "node_046",
+      "type": "waiting_position",
+      "name": "Waiting Position 4",
+      "x": 4.61,
+      "y": -21.97,
+      "headingRad": 1.581
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_001",
+      "from": "node_019",
+      "to": "node_020",
+      "direction": "bidirectional",
+      "distance_m": 5.26,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_004",
+      "from": "node_006",
+      "to": "node_007",
+      "direction": "bidirectional",
+      "distance_m": 11.31,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_005",
+      "from": "node_007",
+      "to": "node_008",
+      "direction": "bidirectional",
+      "distance_m": 4.43,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_006",
+      "from": "node_008",
+      "to": "node_009",
+      "direction": "bidirectional",
+      "distance_m": 5.02,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_007",
+      "from": "node_009",
+      "to": "node_010",
+      "direction": "bidirectional",
+      "distance_m": 6.4,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_008",
+      "from": "node_010",
+      "to": "node_011",
+      "direction": "bidirectional",
+      "distance_m": 6.83,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_009",
+      "from": "node_011",
+      "to": "node_012",
+      "direction": "bidirectional",
+      "distance_m": 8.43,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_010",
+      "from": "node_013",
+      "to": "node_012",
+      "direction": "bidirectional",
+      "distance_m": 8.05,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_011",
+      "from": "node_013",
+      "to": "node_014",
+      "direction": "bidirectional",
+      "distance_m": 2.83,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_012",
+      "from": "node_019",
+      "to": "node_018",
+      "direction": "bidirectional",
+      "distance_m": 6.42,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_013",
+      "from": "node_018",
+      "to": "node_017",
+      "direction": "bidirectional",
+      "distance_m": 5.52,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_014",
+      "from": "node_015",
+      "to": "node_017",
+      "direction": "unidirectional",
+      "distance_m": 3.8,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_015",
+      "from": "node_015",
+      "to": "node_014",
+      "direction": "bidirectional",
+      "distance_m": 4.99,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_018",
+      "from": "node_016",
+      "to": "node_014",
+      "direction": "bidirectional",
+      "distance_m": 4.89,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_019",
+      "from": "node_016",
+      "to": "node_028",
+      "direction": "bidirectional",
+      "distance_m": 5.52,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_020",
+      "from": "node_028",
+      "to": "node_027",
+      "direction": "bidirectional",
+      "distance_m": 5.15,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_021",
+      "from": "node_028",
+      "to": "node_029",
+      "direction": "bidirectional",
+      "distance_m": 6.02,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_022",
+      "from": "node_009",
+      "to": "node_021",
+      "direction": "bidirectional",
+      "distance_m": 4.71,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_024",
+      "from": "node_021",
+      "to": "node_022",
+      "direction": "bidirectional",
+      "distance_m": 6.44,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_026",
+      "from": "node_022",
+      "to": "node_023",
+      "direction": "bidirectional",
+      "distance_m": 5.37,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_028",
+      "from": "node_032",
+      "to": "node_023",
+      "direction": "bidirectional",
+      "distance_m": 3.54,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_032",
+      "from": "node_024",
+      "to": "node_025",
+      "direction": "bidirectional",
+      "distance_m": 6.75,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_033",
+      "from": "node_025",
+      "to": "node_026",
+      "direction": "bidirectional",
+      "distance_m": 9.61,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_034",
+      "from": "node_026",
+      "to": "node_027",
+      "direction": "bidirectional",
+      "distance_m": 8.07,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_035",
+      "from": "node_030",
+      "to": "node_029",
+      "direction": "bidirectional",
+      "distance_m": 3.13,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_036",
+      "from": "node_030",
+      "to": "node_031",
+      "direction": "bidirectional",
+      "distance_m": 6.53,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_037",
+      "from": "node_031",
+      "to": "node_035",
+      "direction": "bidirectional",
+      "distance_m": 6.21,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_039",
+      "from": "node_035",
+      "to": "node_034",
+      "direction": "bidirectional",
+      "distance_m": 6,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_040",
+      "from": "node_034",
+      "to": "node_033",
+      "direction": "bidirectional",
+      "distance_m": 5.71,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_041",
+      "from": "node_032",
+      "to": "node_033",
+      "direction": "bidirectional",
+      "distance_m": 8.13,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_042",
+      "from": "node_022",
+      "to": "node_038",
+      "direction": "bidirectional",
+      "distance_m": 4.19,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_043",
+      "from": "node_024",
+      "to": "node_038",
+      "direction": "bidirectional",
+      "distance_m": 4.16,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_044",
+      "from": "node_006",
+      "to": "node_020",
+      "direction": "bidirectional",
+      "distance_m": 10.33,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_045",
+      "from": "node_039",
+      "to": "node_007",
+      "direction": "unidirectional",
+      "distance_m": 3.89,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_046",
+      "from": "node_008",
+      "to": "node_039",
+      "direction": "unidirectional",
+      "distance_m": 4.44,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_047",
+      "from": "node_040",
+      "to": "node_009",
+      "direction": "unidirectional",
+      "distance_m": 7.45,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_048",
+      "from": "node_022",
+      "to": "node_040",
+      "direction": "unidirectional",
+      "distance_m": 7.15,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_049",
+      "from": "node_041",
+      "to": "node_022",
+      "direction": "unidirectional",
+      "distance_m": 5.8,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_050",
+      "from": "node_023",
+      "to": "node_041",
+      "direction": "unidirectional",
+      "distance_m": 3.59,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_051",
+      "from": "node_029",
+      "to": "node_042",
+      "direction": "unidirectional",
+      "distance_m": 4.7,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_052",
+      "from": "node_042",
+      "to": "node_030",
+      "direction": "unidirectional",
+      "distance_m": 6.72,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_053",
+      "from": "node_028",
+      "to": "node_046",
+      "direction": "bidirectional",
+      "distance_m": 4.67,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_054",
+      "from": "node_016",
+      "to": "node_045",
+      "direction": "bidirectional",
+      "distance_m": 3.82,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_055",
+      "from": "node_015",
+      "to": "node_044",
+      "direction": "bidirectional",
+      "distance_m": 3.93,
+      "speed_limit": null
+    },
+    {
+      "id": "edge_056",
+      "from": "node_017",
+      "to": "node_043",
+      "direction": "bidirectional",
+      "distance_m": 4.15,
+      "speed_limit": null
+    }
+  ]
+}

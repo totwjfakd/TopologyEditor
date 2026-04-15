@@ -1,0 +1,44 @@
+{
+  "kind": "fms_roi_simulator_scenario",
+  "version": 1,
+  "savedAt": "2026-04-15T04:09:26.319Z",
+  "topology": {
+    "mapImage": "v2.pgm",
+    "nodeCount": 40,
+    "edgeCount": 45
+  },
+  "fleet": {
+    "robotCount": 3,
+    "robotSpeedMps": 1,
+    "seed": 7
+  },
+  "missions": [
+    {
+      "id": "mission-1-node_001-node_002",
+      "name": "Mission 1",
+      "stops": [
+        "node_039",
+        "node_041"
+      ],
+      "callsPerHour": 10
+    },
+    {
+      "id": "mission-2-node_001-node_002",
+      "name": "Mission 2",
+      "stops": [
+        "node_041",
+        "node_039"
+      ],
+      "callsPerHour": 10
+    },
+    {
+      "id": "mission-3-node_001-node_002",
+      "name": "Mission 3",
+      "stops": [
+        "node_039",
+        "node_042"
+      ],
+      "callsPerHour": 10
+    }
+  ]
+}
