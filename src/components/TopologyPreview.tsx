@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EdgeDirection, MapRaster, Point, TopologyDocument, ViewState } from "../types";
-import { NODE_TYPE_META } from "../types";
+import { NODE_TYPE_META, nodeSupportsHeading } from "../types";
 import { documentBounds, fitViewToBounds, worldToScreen } from "../utils/geometry";
+import { getScreenHeadingVector } from "../utils/nodeHeading";
 import { drawTopologyBackgroundCanvas } from "../utils/topologyBackground";
 import { mapMatchesDocument } from "../utils/editorDocument";
 import { DEFAULT_VIEW_STATE } from "../utils/viewState";
@@ -116,11 +117,35 @@ export function TopologyPreview(props: TopologyPreviewProps) {
         {props.document.nodes.map((node) => {
           const point = worldToScreen(node, view);
           const color = NODE_TYPE_META[node.type].color;
+          const headingMarker =
+            nodeSupportsHeading(node.type) && typeof node.headingRad === "number"
+              ? {
+                  start: getScreenHeadingVector(node.headingRad, 10),
+                  end: getScreenHeadingVector(node.headingRad, 22),
+                }
+              : null;
 
           return (
             <g key={node.id} transform={`translate(${point.x} ${point.y})`}>
               <circle r="13" className="node-ring" style={{ fill: `${color}18`, stroke: color }} />
               <circle r="7.5" className="node-core" style={{ fill: color }} />
+              {headingMarker ? (
+                <>
+                  <line
+                    x1={headingMarker.start.x}
+                    y1={headingMarker.start.y}
+                    x2={headingMarker.end.x}
+                    y2={headingMarker.end.y}
+                    className="node-heading-line"
+                    style={{ stroke: color }}
+                  />
+                  <polygon
+                    points={makeNodeHeadingArrowPoints(headingMarker.end, node.headingRad!)}
+                    className="node-heading-arrow"
+                    style={{ fill: color }}
+                  />
+                </>
+              ) : null}
               {view.showNodeLabels ? <text x="16" y="-14" className="node-tag">{node.name}</text> : null}
             </g>
           );
@@ -237,4 +262,19 @@ function makeArrowPoints(tip: Point, ux: number, uy: number) {
   };
 
   return `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`;
+}
+
+function makeNodeHeadingArrowPoints(tip: Point, headingRad: number) {
+  const direction = getScreenHeadingVector(headingRad, 1);
+  const length = Math.max(1, Math.hypot(direction.x, direction.y));
+  const ux = direction.x / length;
+  const uy = direction.y / length;
+  const baseX = tip.x - ux * 7;
+  const baseY = tip.y - uy * 7;
+  const leftX = baseX - uy * 4;
+  const leftY = baseY + ux * 4;
+  const rightX = baseX + uy * 4;
+  const rightY = baseY - ux * 4;
+
+  return `${tip.x},${tip.y} ${leftX},${leftY} ${rightX},${rightY}`;
 }

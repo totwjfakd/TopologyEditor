@@ -361,10 +361,32 @@ select:focus-visible {
   stroke-width: 4px;
 }
 
+.node-heading-line {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
+.node-heading-arrow {
+  opacity: 0.95;
+}
+
 .edge-preview {
   stroke: #93c5fd;
   stroke-width: 2;
   stroke-dasharray: 8 6;
+}
+
+.node-heading-preview-line {
+  stroke: #93c5fd;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
+}
+
+.node-heading-preview-ring {
+  fill: rgba(37, 99, 235, 0.1);
+  stroke: rgba(147, 197, 253, 0.92);
+  stroke-width: 2;
 }
 
 .selection-box {
@@ -548,6 +570,22 @@ select:focus-visible {
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--panel-strong);
+}
+
+.inline-input-with-suffix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-input-with-suffix input {
+  width: 100%;
+}
+
+.inline-input-with-suffix em {
+  font-style: normal;
+  color: var(--muted);
 }
 
 .metric-row,

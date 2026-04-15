@@ -194,6 +194,15 @@ export function useSimulatorController(document: TopologyDocument) {
           : current.seed,
       }));
     },
+    replaceScenario: (nextScenario: {
+      fleet: SimulatorFleetConfig;
+      missions: SimulatorMissionDraft[];
+    }) => {
+      setCustomRateMissionId(null);
+      setMissions(nextScenario.missions);
+      setFleet(nextScenario.fleet);
+      setPaused(true);
+    },
     clampMissionCalls,
   };
 }

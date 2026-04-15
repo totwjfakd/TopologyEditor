@@ -11,9 +11,17 @@ export type EdgeReservation = {
   releaseAtMs: number;
 };
 
+export type SectionReservation = {
+  sectionId: string;
+  robotId: string;
+  enteredAtMs: number;
+  releaseAtMs: number;
+};
+
 export type TrafficState = {
   nodeOccupants: Map<string, Set<string>>;
   edgeReservations: EdgeReservation[];
+  sectionReservations: SectionReservation[];
 };
 
 export type EdgeEntryEvaluation =
@@ -21,7 +29,7 @@ export type EdgeEntryEvaluation =
   | {
       allowed: false;
       reason: SimulatorWaitReason;
-      resourceType: "node" | "edge";
+      resourceType: "node" | "edge" | "section";
       resourceId: string;
       blockerRobotId: string | null;
       waitingForLabel: string;
@@ -32,6 +40,7 @@ export function createTrafficState(initialNodeOccupants: Array<{ nodeId: string;
   const traffic: TrafficState = {
     nodeOccupants: new Map(),
     edgeReservations: [],
+    sectionReservations: [],
   };
 
   for (const occupant of initialNodeOccupants) {
@@ -65,6 +74,10 @@ export function reserveEdge(traffic: TrafficState, reservation: EdgeReservation)
   traffic.edgeReservations.push(reservation);
 }
 
+export function reserveSection(traffic: TrafficState, reservation: SectionReservation) {
+  traffic.sectionReservations.push(reservation);
+}
+
 export function releaseEdge(traffic: TrafficState, edgeId: string, robotId: string) {
   const released = traffic.edgeReservations.filter(
     (reservation) => reservation.edgeId === edgeId && reservation.robotId === robotId,
@@ -80,6 +93,21 @@ export function releaseEdge(traffic: TrafficState, edgeId: string, robotId: stri
   return released;
 }
 
+export function releaseSection(traffic: TrafficState, sectionId: string, robotId: string) {
+  const released = traffic.sectionReservations.filter(
+    (reservation) => reservation.sectionId === sectionId && reservation.robotId === robotId,
+  );
+
+  if (released.length === 0) {
+    return [];
+  }
+
+  traffic.sectionReservations = traffic.sectionReservations.filter(
+    (reservation) => !(reservation.sectionId === sectionId && reservation.robotId === robotId),
+  );
+  return released;
+}
+
 export function evaluateEdgeEntry(
   traffic: TrafficState,
   input: {
@@ -90,8 +118,36 @@ export function evaluateEdgeEntry(
     targetNodeId: string;
     nowMs: number;
     headwayMs: number;
+    sectionId?: string | null;
+    sectionLabel?: string | null;
+    sectionReleaseAtMs?: number | null;
   },
 ): EdgeEntryEvaluation {
+  const sectionReleaseAtMs = input.sectionReleaseAtMs;
+  if (input.sectionId && sectionReleaseAtMs !== null && sectionReleaseAtMs !== undefined) {
+    const blockingSectionReservation = traffic.sectionReservations
+      .filter(
+        (reservation) =>
+          reservation.sectionId === input.sectionId &&
+          reservation.robotId !== input.robotId &&
+          reservation.enteredAtMs < sectionReleaseAtMs &&
+          reservation.releaseAtMs > input.nowMs,
+      )
+      .sort((a, b) => b.releaseAtMs - a.releaseAtMs)[0];
+
+    if (blockingSectionReservation) {
+      return {
+        allowed: false,
+        reason: "critical_section",
+        resourceType: "section",
+        resourceId: input.sectionId,
+        blockerRobotId: blockingSectionReservation.robotId,
+        waitingForLabel: input.sectionLabel ?? `Section ${input.sectionId}`,
+        retryAtMs: blockingSectionReservation.releaseAtMs,
+      };
+    }
+  }
+
   const targetNodeOccupants = Array.from(traffic.nodeOccupants.get(input.targetNodeId) ?? []);
   const blockingNodeOccupants = targetNodeOccupants.filter((robotId) => robotId !== input.robotId);
   if (blockingNodeOccupants.length > 0) {

@@ -23,6 +23,7 @@ export interface TopologyNode {
   name: string;
   x: number;
   y: number;
+  headingRad: number | null;
 }
 
 export interface TopologyEdge {
@@ -117,3 +118,7 @@ export const NODE_TYPE_META: Record<
     key: "4",
   },
 };
+
+export function nodeSupportsHeading(type: NodeType) {
+  return type !== "waypoint";
+}

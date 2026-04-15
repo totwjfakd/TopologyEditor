@@ -42,6 +42,10 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
     () => new Map(props.compiledMissionSummaries.map((summary) => [summary.id, summary])),
     [props.compiledMissionSummaries],
   );
+  const waitingPositionCount = useMemo(
+    () => props.document.nodes.filter((node) => node.type === "waiting_position").length,
+    [props.document.nodes],
+  );
   const [expandedMissionId, setExpandedMissionId] = useState<string | null>(null);
   const previousMissionCountRef = useRef(0);
   const totalCallsPerHour = props.missions.reduce((sum, mission) => sum + mission.callsPerHour, 0);
@@ -155,6 +159,10 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
               <dd>
                 {props.document.nodes.length} nodes / {props.document.edges.length} edges
               </dd>
+            </div>
+            <div>
+              <dt>Waiting</dt>
+              <dd>{waitingPositionCount} positions</dd>
             </div>
           </dl>
         </section>
@@ -427,7 +435,7 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
           <div className="sidebar-header">
             <div>
               <h2>Mission Queue</h2>
-              <p>Pending missions waiting for an idle robot.</p>
+              <p>Pending missions wait here until a robot can actually depart.</p>
             </div>
           </div>
           <div className="sidebar-form">
@@ -502,7 +510,13 @@ export function SimulatorWorkspace(props: SimulatorWorkspaceProps) {
 
             {props.snapshot.robots.length === 0 ? (
               <div className="sidebar-empty">
-                <p>Set robot count above zero to populate the fleet.</p>
+                <p>
+                  {props.fleet.robotCount <= 0
+                    ? "Set robot count above zero to populate the fleet."
+                    : waitingPositionCount <= 0
+                      ? "Add at least one Waiting Position node in the editor to spawn robots."
+                      : "No robots were spawned for the current scenario."}
+                </p>
               </div>
             ) : null}
           </div>
@@ -571,6 +585,15 @@ function formatEventType(type: string) {
   if (type === "mission_assigned") {
     return "Assigned";
   }
+  if (type === "parking_assigned") {
+    return "Parking";
+  }
+  if (type === "parking_skipped") {
+    return "No Parking";
+  }
+  if (type === "parking_arrived") {
+    return "Parked";
+  }
   if (type === "robot_ready_to_enter_edge") {
     return "Ready";
   }
@@ -605,6 +628,9 @@ function formatEventType(type: string) {
 function formatWaitReason(reason: string) {
   if (reason === "node_occupancy") {
     return "Node";
+  }
+  if (reason === "critical_section") {
+    return "Section";
   }
   if (reason === "minimum_headway") {
     return "Headway";

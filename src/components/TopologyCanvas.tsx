@@ -11,6 +11,7 @@ import {
 import type {
   ContextMenuState,
   MapRaster,
+  NodeType,
   Point,
   SelectionBox,
   TopologyDocument,
@@ -18,7 +19,7 @@ import type {
   TopologyNode,
   ViewState,
 } from "../types";
-import { NODE_TYPE_META } from "../types";
+import { NODE_TYPE_META, nodeSupportsHeading } from "../types";
 import { useEditorStore } from "../store/editorStore";
 import {
   clampZoom,
@@ -33,6 +34,7 @@ import {
   getEdgeDistance,
   roundMeters,
 } from "../utils/topology";
+import { getHeadingRadBetweenPoints, getScreenHeadingVector } from "../utils/nodeHeading";
 import { drawTopologyBackgroundCanvas } from "../utils/topologyBackground";
 import { getContextMenuSelection } from "./canvasSelection";
 
@@ -64,8 +66,12 @@ export type TopologyCanvasProps = {
   viewportRef: RefObject<HTMLDivElement>;
   mapRaster: MapRaster | null;
   spacePressed: boolean;
+  pendingNodeHeadingId: string | null;
+  onCreateNodeAt: (type: NodeType, world: Point) => void;
   onOpenNodeEditor: (nodeId: string) => void;
   onOpenContextMenu: (menu: ContextMenuState | null) => void;
+  onCancelNodeHeading: () => void;
+  onCommitNodeHeading: (nodeId: string, headingRad: number) => void;
 };
 
 export function TopologyCanvas(props: TopologyCanvasProps) {
@@ -75,12 +81,12 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
   const selection = useEditorStore((state) => state.selection);
   const view = useEditorStore((state) => state.view);
   const edgeMode = useEditorStore((state) => state.edgeMode);
+  const nodeType = useEditorStore((state) => state.nodeType);
 
   const patchView = useEditorStore((state) => state.patchView);
   const setSelection = useEditorStore((state) => state.setSelection);
   const clearSelection = useEditorStore((state) => state.clearSelection);
   const setMouseWorld = useEditorStore((state) => state.setMouseWorld);
-  const createNodeAt = useEditorStore((state) => state.createNodeAt);
   const createEdge = useEditorStore((state) => state.createEdge);
   const replaceDocument = useEditorStore((state) => state.replaceDocument);
   const commitFrom = useEditorStore((state) => state.commitFrom);
@@ -119,6 +125,17 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
     hoveredNodeIdRef.current = hoveredNodeId;
     hoveredEdgeIdRef.current = hoveredEdgeId;
   }, [hoveredEdgeId, hoveredNodeId]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && props.pendingNodeHeadingId) {
+        props.onCancelNodeHeading();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [props]);
 
   useEffect(() => {
     drawTopologyBackgroundCanvas(
@@ -181,7 +198,10 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
   function applyPointerUpdate(screen: Point) {
     const drag = dragRef.current;
     const showCursor = Boolean(
-      hoveredNodeIdRef.current || hoveredEdgeIdRef.current || drag?.kind === "connect",
+      hoveredNodeIdRef.current ||
+        hoveredEdgeIdRef.current ||
+        drag?.kind === "connect" ||
+        props.pendingNodeHeadingId,
     );
 
     setCursorScreen((current) => {
@@ -371,8 +391,36 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
     patchView,
   ]);
 
+  function handleCanvasPointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!props.pendingNodeHeadingId || event.button !== 0 || props.spacePressed) {
+      return;
+    }
+
+    const viewport = props.viewportRef.current;
+    const pendingNode = documentRef.current.nodes.find((node) => node.id === props.pendingNodeHeadingId);
+    if (!viewport || !pendingNode) {
+      props.onCancelNodeHeading();
+      return;
+    }
+
+    const screen = getLocalPoint(event, viewport);
+    const world = screenToWorld(screen, viewRef.current);
+    props.onCommitNodeHeading(
+      pendingNode.id,
+      getHeadingRadBetweenPoints({ x: pendingNode.x, y: pendingNode.y }, world),
+    );
+    setSelection({ nodeIds: [pendingNode.id], edgeIds: [] });
+    suppressClickRef.current = true;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   function handleCanvasPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     props.onOpenContextMenu(null);
+
+    if (props.pendingNodeHeadingId) {
+      return;
+    }
 
     if (event.button === 1 || (event.button === 0 && props.spacePressed)) {
       dragRef.current = {
@@ -407,7 +455,17 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
     }
 
     const world = screenToWorld(getLocalPoint(event, props.viewportRef.current), viewRef.current);
-    createNodeAt(world);
+    props.onCreateNodeAt(nodeType, world);
+  }
+
+  function handleCanvasContextMenuCapture(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!props.pendingNodeHeadingId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    props.onCancelNodeHeading();
   }
 
   function handleCanvasContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
@@ -447,6 +505,10 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
   function handleNodePointerDown(event: ReactPointerEvent<SVGGElement>, nodeId: string) {
     event.stopPropagation();
     props.onOpenContextMenu(null);
+
+    if (props.pendingNodeHeadingId) {
+      return;
+    }
 
     const local = getLocalPoint(event, props.viewportRef.current);
 
@@ -588,8 +650,10 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
     <div
       ref={props.viewportRef}
       className={`canvas-shell ${edgeMode ? "is-edge-mode" : ""}`}
+      onPointerDownCapture={handleCanvasPointerDownCapture}
       onPointerDown={handleCanvasPointerDown}
       onDoubleClick={handleCanvasDoubleClick}
+      onContextMenuCapture={handleCanvasContextMenuCapture}
       onContextMenu={handleCanvasContextMenu}
       onWheel={handleWheel}
       onPointerMove={(event) => {
@@ -659,6 +723,13 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
           const selected = selection.nodeIds.includes(node.id);
           const pending = pendingEdgeFromId === node.id;
           const color = NODE_TYPE_META[node.type].color;
+          const headingMarker =
+            nodeSupportsHeading(node.type) && typeof node.headingRad === "number"
+              ? {
+                  start: getScreenHeadingVector(node.headingRad, 12),
+                  end: getScreenHeadingVector(node.headingRad, 24),
+                }
+              : null;
 
           return (
             <g
@@ -677,10 +748,50 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
             >
               <circle r={selected || pending ? 17 : 14} className="node-ring" style={{ fill: `${color}20`, stroke: color }} />
               <circle r="9" className="node-core" style={{ fill: color }} />
+              {headingMarker ? (
+                <>
+                  <line
+                    x1={headingMarker.start.x}
+                    y1={headingMarker.start.y}
+                    x2={headingMarker.end.x}
+                    y2={headingMarker.end.y}
+                    className={`node-heading-line ${selected ? "is-selected" : ""}`}
+                    style={{ stroke: color }}
+                  />
+                  <polygon
+                    points={makeNodeHeadingArrowPoints(headingMarker.end, node.headingRad!)}
+                    className={`node-heading-arrow ${selected ? "is-selected" : ""}`}
+                    style={{ fill: color }}
+                  />
+                </>
+              ) : null}
               {view.showNodeLabels ? <text x="18" y="-16" className="node-tag">{node.name}</text> : null}
             </g>
           );
         })}
+
+        {props.pendingNodeHeadingId && cursorScreen ? (
+          (() => {
+            const node = nodeMap.get(props.pendingNodeHeadingId);
+            if (!node) {
+              return null;
+            }
+
+            const point = worldToScreen(node, view);
+            return (
+              <g className="node-heading-preview">
+                <line
+                  x1={point.x}
+                  y1={point.y}
+                  x2={cursorScreen.x}
+                  y2={cursorScreen.y}
+                  className="node-heading-preview-line"
+                />
+                <circle cx={point.x} cy={point.y} r="19" className="node-heading-preview-ring" />
+              </g>
+            );
+          })()
+        ) : null}
 
         {dragRef.current?.kind === "connect" ? (
           (() => {
@@ -728,17 +839,23 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
       ) : null}
 
       <div className="canvas-hud">
-        <strong>{edgeMode ? "Edge mode" : "Node mode"}</strong>
+        <strong>{props.pendingNodeHeadingId ? "Direction mode" : edgeMode ? "Edge mode" : "Node mode"}</strong>
         <span>
-          {edgeMode ? "Click A then B, or drag between nodes." : "Double click empty space to create a node."}
+          {props.pendingNodeHeadingId
+            ? "Click once to set the node direction in radians."
+            : edgeMode
+              ? "Click A then B, or drag between nodes."
+              : "Double click empty space to create a node."}
         </span>
       </div>
       <div className="canvas-hud secondary">
-        <strong>{pendingEdgeFromId ? "Source locked" : "Selection"}</strong>
+        <strong>{props.pendingNodeHeadingId ? "Direction pending" : pendingEdgeFromId ? "Source locked" : "Selection"}</strong>
         <span>
-          {pendingEdgeFromId
-            ? "Choose a destination node to complete the edge."
-            : "Drag to box-select. Shift-click adds or removes items."}
+          {props.pendingNodeHeadingId
+            ? "Right-click or press Esc to keep the current direction."
+            : pendingEdgeFromId
+              ? "Choose a destination node to complete the edge."
+              : "Drag to box-select. Shift-click adds or removes items."}
         </span>
       </div>
     </div>
@@ -786,6 +903,21 @@ function moveNodesInDocument(
     nodes: nextNodes,
     edges: nextEdges,
   };
+}
+
+function makeNodeHeadingArrowPoints(tip: Point, headingRad: number) {
+  const direction = getScreenHeadingVector(headingRad, 1);
+  const length = Math.max(1, Math.hypot(direction.x, direction.y));
+  const ux = direction.x / length;
+  const uy = direction.y / length;
+  const baseX = tip.x - ux * 8;
+  const baseY = tip.y - uy * 8;
+  const leftX = baseX - uy * 4.5;
+  const leftY = baseY + ux * 4.5;
+  const rightX = baseX + uy * 4.5;
+  const rightY = baseY - ux * 4.5;
+
+  return `${tip.x},${tip.y} ${leftX},${leftY} ${rightX},${rightY}`;
 }
 
 function NodeTooltip({ node, position }: { node: TopologyNode | null; position: Point }) {

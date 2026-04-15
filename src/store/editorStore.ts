@@ -20,6 +20,8 @@ import {
   recalculateEdgeDistances,
 } from "../utils/topology";
 import { DEFAULT_VIEW_STATE } from "../utils/viewState";
+import { nodeSupportsHeading } from "../types";
+import { DEFAULT_NODE_HEADING_RAD, roundHeadingRad } from "../utils/nodeHeading";
 
 interface EditorState {
   document: TopologyDocument;
@@ -54,10 +56,10 @@ interface EditorState {
   undo: () => void;
   redo: () => void;
   loadDocument: (document: TopologyDocument) => void;
-  createNodeAt: (point: Point) => void;
+  createNodeAt: (point: Point) => string | null;
   updateNode: (
     nodeId: string,
-    updates: Partial<Pick<TopologyDocument["nodes"][number], "name" | "type">>,
+    updates: Partial<Pick<TopologyDocument["nodes"][number], "name" | "type" | "headingRad">>,
   ) => { ok: true } | { ok: false; error: string };
   createEdge: (fromId: string, toId: string) => void;
   toggleEdgeDirection: (edgeId: string) => void;
@@ -171,6 +173,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const node = createNodeRecord(document, point, get().nodeType);
     document.nodes.push(node);
     get().commitDocument(document, { nodeIds: [node.id], edgeIds: [] });
+    return node.id;
   },
   updateNode: (nodeId, updates) => {
     const document = cloneDocument(get().document);
@@ -192,6 +195,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     if (updates.type) {
       node.type = updates.type;
+    }
+
+    if ("headingRad" in updates) {
+      if (updates.headingRad === null || typeof updates.headingRad === "undefined") {
+        node.headingRad = null;
+      } else if (typeof updates.headingRad === "number" && Number.isFinite(updates.headingRad)) {
+        node.headingRad = roundHeadingRad(updates.headingRad);
+      } else {
+        return { ok: false, error: "방향(rad)은 숫자여야 합니다." };
+      }
+    }
+
+    if (!nodeSupportsHeading(node.type)) {
+      node.headingRad = null;
+    } else if (node.headingRad === null) {
+      if ("headingRad" in updates) {
+        return {
+          ok: false,
+          error: "Destination, Charge Station, Waiting Position에는 방향(rad)이 필요합니다.",
+        };
+      }
+      node.headingRad = DEFAULT_NODE_HEADING_RAD;
     }
 
     get().commitDocument(document, {

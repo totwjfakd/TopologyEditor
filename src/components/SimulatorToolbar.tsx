@@ -13,6 +13,8 @@ export type SimulatorToolbarProps = {
   hasStarted: boolean;
   showNodeLabels: boolean;
   showEdgeLabels: boolean;
+  onLoadScenario: () => void;
+  onSaveScenario: () => void;
   onPlay: () => void;
   onPause: () => void;
   onReset: () => void;
@@ -42,7 +44,13 @@ export function SimulatorToolbar(props: SimulatorToolbarProps) {
         <span className="toolbar-label">Mode</span>
         <div className="toolbar-actions">
           <button type="button" className="ghost-button" onClick={props.onBackToEditor}>
-            Back To Editor
+            Editor
+          </button>
+          <button type="button" className="ghost-button" onClick={props.onLoadScenario}>
+            Load
+          </button>
+          <button type="button" className="ghost-button" onClick={props.onSaveScenario}>
+            Save
           </button>
         </div>
       </div>

@@ -8,7 +8,12 @@ import type {
   TopologyEdge,
   TopologyNode,
 } from "../types";
-import { NODE_TYPE_META } from "../types";
+import { NODE_TYPE_META, nodeSupportsHeading } from "../types";
+import {
+  DEFAULT_NODE_HEADING_RAD,
+  legacyHeadingDegToRad,
+  roundHeadingRad,
+} from "./nodeHeading";
 
 export const DEFAULT_RESOLUTION = 0.05;
 
@@ -143,6 +148,7 @@ export function createNodeRecord(
     ),
     x: roundMeters(point.x),
     y: roundMeters(point.y),
+    headingRad: nodeSupportsHeading(type) ? DEFAULT_NODE_HEADING_RAD : null,
   };
 }
 
@@ -315,13 +321,28 @@ export function pasteClipboard(
 }
 
 export function sanitizeLoadedDocument(rawValue: unknown): TopologyDocument {
-  const raw = typeof rawValue === "object" && rawValue ? rawValue : {};
-  const source = raw as Record<string, unknown>;
-  const rawMap =
-    typeof source.map === "object" && source.map ? source.map : undefined;
+  const source = asRecord(rawValue, "토폴로지 JSON 형식이 올바르지 않습니다.");
+  if (source.kind === "fms_roi_simulator_scenario") {
+    throw new Error(
+      "시뮬레이터 시나리오 JSON입니다. 에디터에서는 토폴로지 JSON만 불러올 수 있습니다.",
+    );
+  }
+
+  if (!("map" in source) || !("nodes" in source) || !("edges" in source)) {
+    throw new Error("토폴로지 JSON에 map, nodes, edges 필드가 필요합니다.");
+  }
+
+  const rawMap = asRecord(source.map, "토폴로지 JSON의 map 형식이 올바르지 않습니다.");
+  if (!Array.isArray(source.nodes)) {
+    throw new Error("토폴로지 JSON의 nodes 형식이 올바르지 않습니다.");
+  }
+  if (!Array.isArray(source.edges)) {
+    throw new Error("토폴로지 JSON의 edges 형식이 올바르지 않습니다.");
+  }
+
   const rawMapRecord = rawMap as Record<string, unknown> | undefined;
-  const rawNodes = Array.isArray(source.nodes) ? source.nodes : [];
-  const rawEdges = Array.isArray(source.edges) ? source.edges : [];
+  const rawNodes = source.nodes;
+  const rawEdges = source.edges;
   const rawResolution = rawMapRecord?.resolution;
 
   const map = {
@@ -360,6 +381,7 @@ export function sanitizeLoadedDocument(rawValue: unknown): TopologyDocument {
         name,
         x: toFiniteNumber(node.x),
         y: toFiniteNumber(node.y),
+        headingRad: parseNodeHeadingRad(node.headingRad, node.headingDeg, type),
       },
     ];
   });
@@ -441,4 +463,32 @@ function toFiniteNumber(value: unknown): number {
   }
 
   return 0;
+}
+
+function parseNodeHeadingRad(
+  value: unknown,
+  legacyHeadingDeg: unknown,
+  type: NodeType,
+) {
+  if (!nodeSupportsHeading(type)) {
+    return null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return roundHeadingRad(value);
+  }
+
+  if (typeof legacyHeadingDeg === "number" && Number.isFinite(legacyHeadingDeg)) {
+    return legacyHeadingDegToRad(legacyHeadingDeg);
+  }
+
+  return DEFAULT_NODE_HEADING_RAD;
+}
+
+function asRecord(value: unknown, errorMessage: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(errorMessage);
+  }
+
+  return value as Record<string, unknown>;
 }

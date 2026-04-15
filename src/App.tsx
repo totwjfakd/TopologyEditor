@@ -16,6 +16,7 @@ import type {
   TopologyEdge,
   TopologyNode,
 } from "./types";
+import { nodeSupportsHeading } from "./types";
 import { useEditorStore } from "./store/editorStore";
 import {
   documentBounds,
@@ -27,6 +28,7 @@ import {
   createNodeRecord,
   sanitizeLoadedDocument,
 } from "./utils/topology";
+import { roundHeadingRad } from "./utils/nodeHeading";
 import {
   fileBaseName,
   matchMapFiles,
@@ -56,6 +58,12 @@ type Message = {
 
 type ScreenMode = "editor" | "simulator";
 
+type PendingNodeHeadingSession = {
+  nodeId: string;
+  previousDocument: TopologyDocument;
+  previousSelection: SelectionState;
+};
+
 function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const mapInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +73,8 @@ function App() {
   const toggleEdgeMode = useEditorStore((state) => state.toggleEdgeMode);
   const patchView = useEditorStore((state) => state.patchView);
   const commitDocument = useEditorStore((state) => state.commitDocument);
+  const replaceDocument = useEditorStore((state) => state.replaceDocument);
+  const commitFrom = useEditorStore((state) => state.commitFrom);
   const loadDocument = useEditorStore((state) => state.loadDocument);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
@@ -79,14 +89,23 @@ function App() {
   const [message, setMessage] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [pendingNodeHeading, setPendingNodeHeading] = useState<PendingNodeHeadingSession | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
   const [draftOffer, setDraftOffer] = useState<LocalDraft | null>(() => readLocalDraft());
   const [screenMode, setScreenMode] = useState<ScreenMode>("editor");
   const [simulatorShowNodeLabels, setSimulatorShowNodeLabels] = useState(true);
   const [simulatorShowEdgeLabels, setSimulatorShowEdgeLabels] = useState(true);
+  const pendingNodeHeadingId = pendingNodeHeading?.nodeId ?? null;
 
   const editingNodeExists = useEditorStore((state) =>
     editingNodeId ? state.document.nodes.some((node) => node.id === editingNodeId) : false,
+  );
+  const pendingNodeHeadingExists = useEditorStore((state) =>
+    pendingNodeHeadingId
+      ? state.document.nodes.some(
+          (node) => node.id === pendingNodeHeadingId && nodeSupportsHeading(node.type),
+        )
+      : false,
   );
   const mapRasterRef = useRef<MapRaster | null>(null);
 
@@ -168,6 +187,7 @@ function App() {
       const nextDocument = sanitizeLoadedDocument(parsed);
       const currentMapRaster = mapRasterRef.current;
       const keepCurrentRaster = mapMatchesDocument(nextDocument, currentMapRaster);
+      setPendingNodeHeading(null);
       loadDocument(nextDocument);
       setMapRaster(keepCurrentRaster ? currentMapRaster : null);
       setMessage({
@@ -190,7 +210,9 @@ function App() {
   }
 
   function handleJsonSave() {
-    const currentDocument = useEditorStore.getState().document;
+    const currentDocument = pendingNodeHeading
+      ? pendingNodeHeading.previousDocument
+      : useEditorStore.getState().document;
     const blob = new Blob([JSON.stringify(currentDocument, null, 2)], {
       type: "application/json",
     });
@@ -220,27 +242,80 @@ function App() {
     );
   }
 
-  function handleNodeDialogSave(name: string, type: NodeType) {
+  function handleNodeDialogSave(name: string, type: NodeType, headingRad: number | null) {
     if (!editingNodeId) {
       return;
     }
 
-    const result = updateNode(editingNodeId, { name, type });
+    const result = updateNode(editingNodeId, { name, type, headingRad });
     if (!result.ok) {
       setMessage({ type: "error", text: result.error });
       return;
     }
 
+    setPendingNodeHeading((current) => (current?.nodeId === editingNodeId ? null : current));
     setEditingNodeId(null);
   }
 
-  function handleCreateNodeFromContext(type: NodeType, world: Point) {
-    const currentDocument = useEditorStore.getState().document;
+  function startNodeCreation(type: NodeType, world: Point) {
+    const { document: currentDocument, selection: currentSelection } = useEditorStore.getState();
     const nextDocument = cloneDocument(currentDocument);
     const node = createNodeRecord(nextDocument, world, type);
     nextDocument.nodes.push(node);
-    commitDocument(nextDocument, { nodeIds: [node.id], edgeIds: [] });
+    const nextSelection = { nodeIds: [node.id], edgeIds: [] } satisfies SelectionState;
+
+    if (nodeSupportsHeading(type)) {
+      replaceDocument(nextDocument, nextSelection);
+      setPendingNodeHeading({
+        nodeId: node.id,
+        previousDocument: cloneDocument(currentDocument),
+        previousSelection: currentSelection,
+      });
+      return;
+    }
+
+    commitDocument(nextDocument, nextSelection);
+    setPendingNodeHeading(null);
+  }
+
+  function handleCreateNodeFromContext(type: NodeType, world: Point) {
+    startNodeCreation(type, world);
     setContextMenu(null);
+  }
+
+  function cancelPendingNodeHeading(restorePreview = true) {
+    if (!pendingNodeHeading) {
+      return;
+    }
+
+    if (restorePreview) {
+      replaceDocument(
+        cloneDocument(pendingNodeHeading.previousDocument),
+        pendingNodeHeading.previousSelection,
+      );
+    }
+    setPendingNodeHeading(null);
+  }
+
+  function commitPendingNodeHeading(nodeId: string, headingRad: number) {
+    if (!pendingNodeHeading || pendingNodeHeading.nodeId !== nodeId) {
+      return;
+    }
+
+    const currentDocument = useEditorStore.getState().document;
+    const nextDocument = cloneDocument(currentDocument);
+    const node = nextDocument.nodes.find((entry) => entry.id === nodeId);
+    if (!node || !nodeSupportsHeading(node.type)) {
+      cancelPendingNodeHeading(false);
+      return;
+    }
+
+    node.headingRad = roundHeadingRad(headingRad);
+    commitFrom(pendingNodeHeading.previousDocument, nextDocument, {
+      nodeIds: [nodeId],
+      edgeIds: [],
+    });
+    setPendingNodeHeading(null);
   }
 
   function handleRestoreDraft() {
@@ -248,6 +323,7 @@ function App() {
       return;
     }
 
+    setPendingNodeHeading(null);
     loadDocument(draftOffer.document);
     patchView(draftOffer.view);
     setMapRaster(null);
@@ -270,6 +346,7 @@ function App() {
 
   function handleOpenSimulator() {
     const currentView = useEditorStore.getState().view;
+    cancelPendingNodeHeading();
     setContextMenu(null);
     setEditingNodeId(null);
     setSpacePressed(false);
@@ -307,6 +384,16 @@ function App() {
   }, [editingNodeExists, editingNodeId]);
 
   useEffect(() => {
+    if (!pendingNodeHeadingId) {
+      return;
+    }
+
+    if (!pendingNodeHeadingExists) {
+      setPendingNodeHeading(null);
+    }
+  }, [pendingNodeHeadingExists, pendingNodeHeadingId]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (screenMode === "simulator") {
         return;
@@ -322,6 +409,10 @@ function App() {
         const lowerKey = event.key.toLowerCase();
         if (lowerKey === "z") {
           event.preventDefault();
+          if (pendingNodeHeadingId) {
+            cancelPendingNodeHeading();
+            return;
+          }
           if (event.shiftKey) {
             redo();
           } else {
@@ -413,6 +504,7 @@ function App() {
     };
   }, [
     copySelection,
+    pendingNodeHeadingId,
     deleteSelection,
     pasteClipboardAt,
     redo,
@@ -441,7 +533,7 @@ function App() {
         onChange={handleJsonLoad}
       />
 
-      <AutoSaveBridge paused={Boolean(draftOffer)} />
+      <AutoSaveBridge paused={Boolean(draftOffer || pendingNodeHeading)} />
 
       {screenMode === "editor" ? (
         <ToolbarContainer
@@ -463,6 +555,8 @@ function App() {
           onToggleNodeLabels={() => setSimulatorShowNodeLabels((current) => !current)}
           onToggleEdgeLabels={() => setSimulatorShowEdgeLabels((current) => !current)}
           onBackToEditor={handleReturnToEditor}
+          onShowInfo={(text) => setMessage({ type: "info", text })}
+          onShowError={(text) => setMessage({ type: "error", text })}
         />
       )}
 
@@ -481,8 +575,12 @@ function App() {
               viewportRef={viewportRef}
               mapRaster={mapRaster}
               spacePressed={spacePressed}
+              pendingNodeHeadingId={pendingNodeHeadingId}
+              onCreateNodeAt={startNodeCreation}
               onOpenNodeEditor={setEditingNodeId}
               onOpenContextMenu={setContextMenu}
+              onCancelNodeHeading={() => cancelPendingNodeHeading()}
+              onCommitNodeHeading={(nodeId, headingRad) => commitPendingNodeHeading(nodeId, headingRad)}
             />
             <StatusBarContainer mapRaster={mapRaster} />
           </div>
@@ -644,8 +742,8 @@ function InspectorContainer(props: InspectorContainerProps) {
       selectedNode={selectedNode}
       selectedEdge={selectedEdge}
       mapRaster={props.mapRaster}
-      onUpdateNode={(nodeId, name, type) => {
-        const result = updateNode(nodeId, { name, type });
+      onUpdateNode={(nodeId, name, type, headingRad) => {
+        const result = updateNode(nodeId, { name, type, headingRad });
         if (!result.ok) {
           props.onShowError(result.error);
         }
@@ -745,7 +843,7 @@ function ContextMenuContainer(props: ContextMenuContainerProps) {
 type NodeEditorDialogContainerProps = {
   nodeId: string | null;
   onClose: () => void;
-  onSave: (name: string, type: NodeType) => void;
+  onSave: (name: string, type: NodeType, headingRad: number | null) => void;
 };
 
 function NodeEditorDialogContainer(props: NodeEditorDialogContainerProps) {

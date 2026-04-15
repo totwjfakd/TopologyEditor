@@ -7,7 +7,7 @@ import type {
   TopologyEdge,
   TopologyNode,
 } from "../types";
-import { NODE_TYPE_META, NODE_TYPE_ORDER } from "../types";
+import { NODE_TYPE_META, NODE_TYPE_ORDER, nodeSupportsHeading } from "../types";
 
 export type InspectorProps = {
   document: TopologyDocument;
@@ -15,7 +15,12 @@ export type InspectorProps = {
   selectedNode: TopologyNode | null;
   selectedEdge: TopologyEdge | null;
   mapRaster: MapRaster | null;
-  onUpdateNode: (nodeId: string, name: string, type: NodeType) => void;
+  onUpdateNode: (
+    nodeId: string,
+    name: string,
+    type: NodeType,
+    headingRad: number | null,
+  ) => void;
   onOpenNodeEditor: () => void;
   onToggleEdgeDirection: (edgeId: string) => void;
   onDeleteSelection: () => void;
@@ -25,12 +30,18 @@ export type InspectorProps = {
 export function InspectorPanel(props: InspectorProps) {
   const [name, setName] = useState("");
   const [type, setType] = useState<NodeType>("destination");
+  const [headingInput, setHeadingInput] = useState("");
   const selectionCount = props.selection.nodeIds.length + props.selection.edgeIds.length;
 
   useEffect(() => {
     if (props.selectedNode) {
       setName(props.selectedNode.name);
       setType(props.selectedNode.type);
+      setHeadingInput(
+        typeof props.selectedNode.headingRad === "number"
+          ? String(props.selectedNode.headingRad)
+          : "",
+      );
     }
   }, [props.selectedNode]);
 
@@ -110,15 +121,42 @@ export function InspectorPanel(props: InspectorProps) {
                 ))}
               </select>
             </label>
+            {nodeSupportsHeading(type) ? (
+              <label>
+                <span>Direction (rad)</span>
+                <div className="inline-input-with-suffix">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={headingInput}
+                    placeholder="Not set"
+                    onChange={(event) => setHeadingInput(event.target.value)}
+                  />
+                  <em>rad</em>
+                </div>
+              </label>
+            ) : null}
             <div className="metric-row">
               <span>X {props.selectedNode.x.toFixed(2)} m</span>
               <span>Y {props.selectedNode.y.toFixed(2)} m</span>
+              {nodeSupportsHeading(type) ? (
+                <span>
+                  Direction {headingInput.trim() ? `${Number(headingInput).toFixed(2)} rad` : "unset"}
+                </span>
+              ) : null}
             </div>
             <div className="sidebar-actions">
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => props.onUpdateNode(props.selectedNode!.id, name, type)}
+                onClick={() =>
+                  props.onUpdateNode(
+                    props.selectedNode!.id,
+                    name,
+                    type,
+                    headingInput.trim() ? Number(headingInput) : null,
+                  )
+                }
               >
                 Apply
               </button>

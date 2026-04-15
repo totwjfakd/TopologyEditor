@@ -30,6 +30,31 @@ export type SimulatorRouteSegment = {
   loaded: boolean;
 };
 
+export type SimulatorTimedRouteSegment = SimulatorRouteSegment & {
+  waitStartMs: number;
+  waitEndMs: number;
+  departAtMs: number;
+  arriveAtMs: number;
+  sectionId: string | null;
+  sectionLabel: string | null;
+  sectionReleaseAtMs: number | null;
+  waitReason: SimulatorWaitReason | null;
+  waitResourceType: "node" | "edge" | "section" | null;
+  waitResourceId: string | null;
+  waitingForLabel: string | null;
+  blockerRobotId: string | null;
+};
+
+export type ReservationWindow = {
+  resourceType: "node" | "edge" | "section";
+  resourceId: string;
+  robotId: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  fromNodeId?: string;
+  toNodeId?: string;
+};
+
 export type SimulatorRobotStatus =
   | "idle"
   | "moving_empty"
@@ -40,7 +65,8 @@ export type SimulatorWaitReason =
   | "node_occupancy"
   | "edge_occupancy"
   | "minimum_headway"
-  | "bidirectional_mutual_exclusion";
+  | "bidirectional_mutual_exclusion"
+  | "critical_section";
 
 export type SimulatorMotion = {
   edgeId: string;
@@ -54,7 +80,7 @@ export type SimulatorMotion = {
 
 export type SimulatorWaitState = {
   reason: SimulatorWaitReason;
-  resourceType: "node" | "edge";
+  resourceType: "node" | "edge" | "section";
   resourceId: string;
   blockerRobotId: string | null;
   startedAtMs: number;
@@ -67,11 +93,13 @@ export type SimulatorRobotState = {
   name: string;
   status: SimulatorRobotStatus;
   currentNodeId: string;
+  routeKind: "mission" | "parking" | null;
+  routeVersion: number;
   currentMissionId: string | null;
   currentMissionName: string | null;
   completedMissionCount: number;
   totalDistanceM: number;
-  routeSegments: SimulatorRouteSegment[];
+  routeSegments: SimulatorTimedRouteSegment[];
   routeIndex: number;
   motion: SimulatorMotion | null;
   waitState: SimulatorWaitState | null;
@@ -98,6 +126,9 @@ export type SimulationEventType =
   | "mission_created"
   | "mission_dropped"
   | "mission_assigned"
+  | "parking_assigned"
+  | "parking_skipped"
+  | "parking_arrived"
   | "robot_ready_to_enter_edge"
   | "edge_blocked"
   | "edge_enter_granted"
@@ -163,4 +194,17 @@ export type SimulatorFleetConfig = {
   robotCount: number;
   robotSpeedMps: number;
   seed: number;
+};
+
+export type SimulatorScenarioDocument = {
+  kind: "fms_roi_simulator_scenario";
+  version: 1;
+  savedAt: string;
+  topology: {
+    mapImage: string;
+    nodeCount: number;
+    edgeCount: number;
+  };
+  fleet: SimulatorFleetConfig;
+  missions: SimulatorMissionDraft[];
 };
